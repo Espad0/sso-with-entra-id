@@ -1,0 +1,63 @@
+# SSO lab: one identity provider (a stand-in for Entra ID) and two apps.
+# The browser reaches them at idp.localhost:9000, app-a.localhost:8001 and
+# app-b.localhost:8002. Ports are bound to 127.0.0.1, so only this Mac can reach them.
+services:
+  idp:
+    image: docker.io/library/python:3.12-slim
+    command: ["python", "-u", "/srv/idp.py"]
+    volumes:
+      - ./idp:/srv:ro
+    ports:
+      - "127.0.0.1:9000:9000"
+    networks:
+      default:
+        aliases:
+          - idp.localhost   # the apps reach the IdP at the same URL as the browser
+
+  app-a:
+    image: docker.io/library/python:3.12-slim
+    command: ["python", "-u", "/srv/app.py"]
+    volumes:
+      - ./app:/srv:ro
+    ports:
+      - "127.0.0.1:8001:8001"
+    environment:
+      APP_NAME: App A
+      APP_COLOR: "#0b6b6b"
+      PORT: "8001"
+      PUBLIC_URL: http://app-a.localhost:8001
+      OTHER_APP_URL: http://app-b.localhost:8002
+      ISSUER: http://idp.localhost:9000/0f1e2d3c-4b5a-4697-8877-665544332211/v2.0
+      CLIENT_ID: a0000000-0000-4000-8000-00000000000a
+      CLIENT_SECRET_FILE: /run/secrets/app_a_secret
+    secrets:
+      - app_a_secret
+    depends_on:
+      - idp
+
+  app-b:
+    image: docker.io/library/python:3.12-slim
+    command: ["python", "-u", "/srv/app.py"]
+    volumes:
+      - ./app:/srv:ro
+    ports:
+      - "127.0.0.1:8002:8002"
+    environment:
+      APP_NAME: App B
+      APP_COLOR: "#6a3fa0"
+      PORT: "8002"
+      PUBLIC_URL: http://app-b.localhost:8002
+      OTHER_APP_URL: http://app-a.localhost:8001
+      ISSUER: http://idp.localhost:9000/0f1e2d3c-4b5a-4697-8877-665544332211/v2.0
+      CLIENT_ID: b0000000-0000-4000-8000-00000000000b
+      CLIENT_SECRET_FILE: /run/secrets/app_b_secret
+    secrets:
+      - app_b_secret
+    depends_on:
+      - idp
+
+secrets:
+  app_a_secret:
+    file: ./secrets/app-a-secret.txt
+  app_b_secret:
+    file: ./secrets/app-b-secret.txt

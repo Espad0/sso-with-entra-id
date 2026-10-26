@@ -1,0 +1,50 @@
+{
+  "tenant_id": "0f1e2d3c-4b5a-4697-8877-665544332211",
+  "tenant_name": "Lab Tenant",
+
+  "users": [
+    {
+      "username": "alice@lab.test",
+      "password": "lab-password",
+      "name": "Alice Example",
+      "oid": "aaaaaaaa-1111-4111-8111-111111111111"
+    },
+    {
+      "username": "bob@lab.test",
+      "password": "lab-password",
+      "name": "Bob Example",
+      "oid": "bbbbbbbb-2222-4222-8222-222222222222"
+    }
+  ],
+
+  "app_registrations": [
+    {
+      "display_name": "App A",
+      "client_id": "a0000000-0000-4000-8000-00000000000a",
+      "client_secret": "lab-secret-for-app-a",
+      "redirect_uris": [
+        "http://app-a.localhost:8001/auth/callback",
+        "http://app-a.localhost:8001/"
+      ],
+      "frontchannel_logout_url": "http://app-a.localhost:8001/auth/frontchannel-logout",
+      "assignment_required": false,
+      "assignments": {
+        "alice@lab.test": ["Admin"]
+      }
+    },
+    {
+      "display_name": "App B",
+      "client_id": "b0000000-0000-4000-8000-00000000000b",
+      "client_secret": "lab-secret-for-app-b",
+      "redirect_uris": [
+        "http://app-b.localhost:8002/auth/callback",
+        "http://app-b.localhost:8002/"
+      ],
+      "frontchannel_logout_url": "http://app-b.localhost:8002/auth/frontchannel-logout",
+      "assignment_required": true,
+      "assignments": {
+        "alice@lab.test": []
+      }
+    }
+  ]
+}
