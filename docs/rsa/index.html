@@ -1,0 +1,1799 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="How RSA signatures work, step by step: remainders, key pairs, forging, padding, and a real 2048-bit RS256 signature opened by hand, with interactive figures and an OpenSSL lab.">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>How RSA Signatures Work</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap">
+<style>
+/* Layout: a textbook page. Contents on the left, one reading column, definitions in the
+   right margin on wide screens (inline boxes on narrow ones). Actors keep one colour
+   everywhere: browser = slate, your app = teal, identity provider = indigo, keys = amber. */
+:root{
+  --bg:#FAFBFC;
+  --paper:#FFFFFF;
+  --ink:#1A1D24;
+  --ink-2:#394051;
+  --muted:#5D6474;
+  --rule:#D9DDE5;
+  --rule-2:#ECEEF2;
+  --idp:#3A44A0;
+  --idp-soft:#ECEEFA;
+  --app:#0B6B6B;
+  --app-soft:#E2F2F0;
+  --br:#4A5568;
+  --br-soft:#EDEFF3;
+  --app2:#6A3FA0;
+  --app2-soft:#F1EAF9;
+  --key:#8A5700;
+  --key-soft:#FAF0DC;
+  --ok:#1D7544;
+  --ok-soft:#E2F3E8;
+  --bad:#B0281B;
+  --bad-soft:#FBE8E5;
+  --code:#F0F2F5;
+  --mark:#FFF0B3;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#101217;--paper:#161920;--ink:#E5E7ED;--ink-2:#C5CAD6;--muted:#99A0B0;--rule:#2B303B;--rule-2:#20242D;
+    --idp:#A3ABFF;--idp-soft:#1D2142;--app:#56C6C0;--app-soft:#12302F;--br:#AEB8C8;--br-soft:#20252E;--app2:#C3A0F2;--app2-soft:#2A1D3D;
+    --key:#E3B35A;--key-soft:#2E2412;--ok:#6FCC96;--ok-soft:#142B1E;--bad:#F2897D;--bad-soft:#341815;
+    --code:#1C2029;--mark:#4A3F12;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101217;--paper:#161920;--ink:#E5E7ED;--ink-2:#C5CAD6;--muted:#99A0B0;--rule:#2B303B;--rule-2:#20242D;
+  --idp:#A3ABFF;--idp-soft:#1D2142;--app:#56C6C0;--app-soft:#12302F;--br:#AEB8C8;--br-soft:#20252E;--app2:#C3A0F2;--app2-soft:#2A1D3D;
+  --key:#E3B35A;--key-soft:#2E2412;--ok:#6FCC96;--ok-soft:#142B1E;--bad:#F2897D;--bad-soft:#341815;
+  --code:#1C2029;--mark:#4A3F12;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{background:var(--bg);color:var(--ink);font:400 18px/1.68 var(--serif);
+  font-optical-sizing:auto;padding-inline:20px;padding-block:0 96px}
+a{color:var(--idp);text-underline-offset:2px;text-decoration-thickness:1px}
+a:hover{text-decoration-thickness:2px}
+:focus-visible{outline:2px solid var(--idp);outline-offset:2px}
+button,input,select,textarea{font:inherit;color:inherit}
+p,li{text-wrap:pretty}
+h1,h2,h3,h4{text-wrap:balance}
+strong{font-weight:650}
+code{font:500 0.82em/1.4 var(--mono);background:var(--code);padding:0.1em 0.32em;border-radius:3px;
+  overflow-wrap:anywhere}
+kbd{font:500 13px var(--mono);border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;padding:0 5px}
+
+/* ---------- page frame ---------- */
+.shell{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:36px}
+@media (min-width:1060px){.shell{grid-template-columns:220px minmax(0,1fr)}}
+.toc{padding-top:36px;font-family:var(--sans)}
+.toc nav{display:flex;flex-direction:column}
+@media (min-width:1060px){.toc nav{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);max-height:calc(100vh - 40px);overflow:auto;padding-right:4px}}
+.toc .lbl{font:600 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.toc .part-l{font:600 11px/1.3 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px}
+.toc a{display:grid;grid-template-columns:26px 1fr;color:var(--muted);text-decoration:none;font-size:13.5px;line-height:1.35;padding:4px 0}
+.toc a span{font:500 12px/1.55 var(--mono)}
+.toc a:hover,.toc a.on{color:var(--ink)}
+.toc a.on span{color:var(--idp)}
+.progress{height:3px;background:var(--rule-2);margin:4px 0 14px;border-radius:2px;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--idp)}
+@media (max-width:1059px){
+  .toc{padding-top:22px}
+  .toc nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));column-gap:18px;
+    border-block:1px solid var(--rule);padding-block:12px}
+  .toc .lbl,.toc .progress{grid-column:1/-1}
+  .toc .part-l{grid-column:1/-1;margin-top:8px}
+}
+
+main{min-width:0;max-width:740px;padding-top:40px}
+@media (min-width:1300px){main{max-width:740px;margin-right:270px}}
+
+/* ---------- title page ---------- */
+.title-page{padding:20px 0 30px;border-bottom:1px solid var(--rule);margin-bottom:34px}
+.eyebrow{font:600 12px/1.2 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--idp);margin:0 0 14px}
+h1{font:600 clamp(36px,6vw,58px)/1.04 var(--serif);font-variation-settings:"opsz" 60;letter-spacing:-0.015em;margin:0 0 18px}
+.lede{font-size:21px;line-height:1.55;color:var(--ink-2);margin:0 0 22px;max-width:36em}
+.meta{display:flex;flex-wrap:wrap;gap:8px 22px;font:14px/1.5 var(--sans);color:var(--muted);margin:0}
+.meta b{color:var(--ink);font-weight:600}
+
+/* ---------- headings ---------- */
+.part{margin:72px 0 30px;padding:22px 0 0;border-top:3px double var(--rule)}
+.part .eyebrow{margin-bottom:6px}
+.part h2{font:600 30px/1.15 var(--serif);margin:0 0 8px}
+.part p{font-size:17px;color:var(--muted);margin:0;max-width:34em}
+section.chap{scroll-margin-top:20px}
+h2.sec{display:flex;gap:16px;align-items:baseline;font:600 31px/1.18 var(--serif);
+  font-variation-settings:"opsz" 48;margin:64px 0 18px;letter-spacing:-0.01em}
+h2.sec .n{font:600 15px/1 var(--mono);color:var(--idp);border:1.5px solid currentColor;
+  border-radius:50%;width:38px;height:38px;display:inline-grid;place-items:center;flex:none;
+  transform:translateY(-4px)}
+h3{font:600 22px/1.3 var(--serif);margin:42px 0 10px;scroll-margin-top:16px}
+h3 .n{font:600 14px/1 var(--mono);color:var(--muted);margin-right:10px}
+h4{font:600 15px/1.4 var(--sans);margin:26px 0 6px;letter-spacing:.01em}
+.why{font-size:18px;background:var(--br-soft);padding:14px 18px;margin:0 0 22px;border-radius:2px}
+.why b{font:600 12px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  display:block;margin-bottom:6px}
+
+/* ---------- margin notes ---------- */
+.mn{font:14px/1.5 var(--sans);color:var(--ink-2);background:var(--paper);border:1px solid var(--rule);
+  padding:10px 12px;margin:0 0 16px;border-radius:2px}
+.mn b{display:block;font-weight:600;color:var(--ink);margin-bottom:2px}
+.mn b.idp{color:var(--idp)}.mn b.app{color:var(--app)}.mn b.key{color:var(--key)}
+@media (min-width:1300px){
+  .mn{float:right;clear:right;width:240px;margin:4px -272px 12px 0;background:none;border:0;
+    border-top:1px solid var(--rule);padding:8px 0 0}
+}
+
+/* ---------- boxes ---------- */
+.key{background:var(--idp-soft);padding:16px 20px;margin:26px 0;border-radius:2px}
+.key .k{font:600 12px/1 var(--sans);letter-spacing:.11em;text-transform:uppercase;color:var(--idp);margin:0 0 8px}
+.key p{margin:0}.key p+p{margin-top:8px}
+.warn{background:var(--key-soft);padding:14px 18px;margin:22px 0;border-radius:2px;font-size:17px}
+.warn .k{font:600 12px/1 var(--sans);letter-spacing:.11em;text-transform:uppercase;color:var(--key);margin:0 0 6px}
+.warn p{margin:0}
+.proof{border:1px solid var(--rule);background:var(--paper);margin:22px 0;border-radius:2px}
+.proof .k{font:600 12px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ok);
+  padding:10px 14px 0;margin:0}
+.proof p{font-size:16.5px;margin:6px 14px 10px}
+.proof pre{margin:0;border-radius:0 0 2px 2px}
+
+/* ---------- code ---------- */
+.cmd{position:relative;margin:14px 0}
+.cmd pre,pre.out,pre.code{margin:0;font:13.5px/1.55 var(--mono);background:var(--code);padding:12px 14px;
+  overflow-x:auto;border-radius:2px;white-space:pre}
+.cmd pre{padding-right:64px}
+.cmd .copy{position:absolute;top:7px;right:7px;font:600 12px/1 var(--sans);background:var(--paper);
+  border:1px solid var(--rule);border-radius:3px;padding:5px 8px;cursor:pointer;color:var(--muted)}
+.cmd .copy:hover{color:var(--ink)}
+.olabel{font:600 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:12px 0 5px}
+pre.out{background:var(--paper);border:1px solid var(--rule)}
+.c-idp{color:var(--idp)}.c-app{color:var(--app)}.c-key{color:var(--key)}.c-mut{color:var(--muted)}
+.c-ok{color:var(--ok)}.c-bad{color:var(--bad)}
+.jwt{font:13px/1.55 var(--mono);overflow-wrap:anywhere;word-break:break-all;background:var(--paper);
+  border:1px solid var(--rule);padding:10px 12px;margin:0}
+.jwt .h{color:var(--bad)}.jwt .p{color:var(--idp)}.jwt .s{color:var(--app)}
+
+/* ---------- figures and tables ---------- */
+figure{margin:30px 0;padding:0}
+figcaption{font:14px/1.5 var(--sans);color:var(--muted);margin-top:10px}
+figcaption b{color:var(--ink);font-weight:600}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.tbl{border-collapse:collapse;width:100%;font:14.5px/1.5 var(--sans);font-variant-numeric:tabular-nums}
+.tbl th,.tbl td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--rule)}
+.tbl thead th{font-weight:600;border-bottom:1.5px solid var(--ink);white-space:nowrap}
+.tbl tbody th{font-weight:600}
+.tbl td code,.tbl th code{font-size:12.5px}
+.tbl.wide{min-width:640px}
+
+/* ---------- details ---------- */
+details.deep{border:1px solid var(--rule);background:var(--paper);margin:22px 0;border-radius:2px}
+details.deep summary{cursor:pointer;list-style:none;font:600 15px/1.4 var(--sans);padding:11px 14px;
+  display:flex;gap:10px;align-items:baseline}
+details.deep summary::-webkit-details-marker{display:none}
+details.deep summary::before{content:"+";font:600 15px/1 var(--mono);color:var(--idp);width:12px}
+details.deep[open] summary::before{content:"−"}
+details.deep summary .t{font:600 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+details.deep .in{padding:0 16px 8px;font-size:17px}
+details.deep .in>:first-child{margin-top:0}
+
+/* ---------- widgets ---------- */
+.w{border:1px solid var(--rule);background:var(--paper);border-radius:3px;padding:16px;font:15px/1.5 var(--sans)}
+.w .wt{font:600 12px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 12px;
+  display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.w .wt .live{color:var(--ok)}
+.btn{font:600 14px/1 var(--sans);border:1px solid var(--rule);background:var(--paper);color:var(--ink);
+  padding:8px 12px;border-radius:3px;cursor:pointer}
+.btn:hover{border-color:var(--ink-2)}
+.btn.pri{background:var(--idp);border-color:var(--idp);color:var(--paper)}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.seg button{border:0;background:var(--paper);padding:7px 12px;font:600 13.5px/1 var(--sans);cursor:pointer;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.w textarea,.w input[type=text],.w select{width:100%;border:1px solid var(--rule);background:var(--bg);
+  border-radius:3px;padding:8px 10px;font:13px/1.5 var(--mono)}
+.w textarea{resize:vertical;min-height:80px}
+.w label.f{display:block;font:600 12.5px/1.3 var(--sans);color:var(--muted);margin:10px 0 4px}
+.badge{display:inline-block;font:600 12px/1.2 var(--sans);padding:3px 7px;border-radius:3px}
+.badge.ok{background:var(--ok-soft);color:var(--ok)}.badge.bad{background:var(--bad-soft);color:var(--bad)}
+.badge.mut{background:var(--br-soft);color:var(--muted)}
+.res{font:13px/1.5 var(--mono);overflow-wrap:anywhere;background:var(--code);padding:8px 10px;border-radius:3px;margin-top:8px}
+
+/* offboarding */
+.off-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:12px}
+.off-card{border:1px solid var(--rule);border-radius:3px;padding:10px;background:var(--bg);display:flex;flex-direction:column;gap:6px}
+.off-card .nm{font-weight:600}
+.off-card .st{font-size:13px}
+.off-card.gone{background:var(--ok-soft);border-color:transparent}
+.off-card.live{background:var(--bad-soft);border-color:transparent}
+.off-card.idp{background:var(--idp-soft);border-color:transparent}
+.off-sum{margin-top:12px;font-weight:600}
+
+/* checks */
+.check{border-top:2px solid var(--ink);margin:38px 0 10px;padding-top:12px}
+.check .k{font:600 12px/1 var(--sans);letter-spacing:.11em;text-transform:uppercase;margin:0 0 4px}
+.q{margin:16px 0 18px;font:16px/1.5 var(--sans)}
+.q .qt{font-weight:600;margin:0 0 8px}
+.q .opts{display:flex;flex-direction:column;gap:6px}
+.q .opts button{text-align:left;border:1px solid var(--rule);background:var(--paper);border-radius:3px;padding:8px 12px;cursor:pointer;font:15px/1.4 var(--sans)}
+.q .opts button:hover{border-color:var(--ink-2)}
+.q .opts button.right{background:var(--ok-soft);border-color:var(--ok)}
+.q .opts button.wrong{background:var(--bad-soft);border-color:var(--bad)}
+.q .fb{margin-top:8px;font-size:15px;color:var(--ink-2)}
+.q .fb b{color:var(--ink)}
+
+/* flow stepper */
+.flow{padding:0}
+.flow .top{padding:14px 16px 0}
+.flow svg{display:block;width:100%;height:auto;min-width:500px}
+.flow .lane-t{font:600 13px var(--sans)}
+.flow .panel{border-top:1px solid var(--rule);padding:14px 16px 16px}
+.flow .st-n{font:600 12px/1 var(--mono);color:var(--idp);margin:0 0 6px}
+.flow .st-t{font:600 18px/1.3 var(--serif);margin:0 0 6px}
+.flow .st-d{margin:0 0 8px;font-size:15.5px}
+.flow .st-why{margin:8px 0 0;font-size:14.5px;color:var(--ink-2)}
+.flow .st-why b{color:var(--ink)}
+.flow pre{font:12.5px/1.5 var(--mono);background:var(--code);padding:10px 12px;margin:8px 0 0;overflow-x:auto;white-space:pre}
+.flow .log{font:12.5px/1.5 var(--mono);color:var(--muted);margin:8px 0 0;overflow-wrap:anywhere}
+.jars{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-top:10px}
+.jar{border:1px solid var(--rule);border-radius:3px;padding:8px;font-size:12.5px;background:var(--bg)}
+.jar .h{font:600 12px/1.2 var(--mono);margin-bottom:4px;overflow-wrap:anywhere}
+.jar .cookie{display:inline-block;font:12px/1.3 var(--mono);padding:2px 6px;border-radius:3px;margin:2px 3px 0 0}
+.jar .none{color:var(--muted)}
+.jar.br .h{color:var(--br)}.jar.idp .h{color:var(--idp)}.jar.app .h{color:var(--app)}.jar.app2 .h{color:var(--app2)}
+.jar.idp .cookie{background:var(--idp-soft);color:var(--idp)}
+.jar.app .cookie{background:var(--app-soft);color:var(--app)}
+.jar.app2 .cookie{background:var(--app2-soft);color:var(--app2)}
+.jar.flash{outline:2px solid var(--key)}
+.flow .ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--rule)}
+.dots{display:flex;gap:4px;flex-wrap:wrap}
+.dots button{width:22px;height:22px;border-radius:50%;border:1px solid var(--rule);background:var(--paper);font:600 10px/1 var(--mono);cursor:pointer;color:var(--muted);padding:0}
+.dots button.on{background:var(--idp);border-color:var(--idp);color:var(--paper)}
+
+/* attack simulator */
+.atk-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.atk-out{margin-top:12px;padding:12px;border-radius:3px}
+.atk-out.bad{background:var(--bad-soft)}.atk-out.ok{background:var(--ok-soft)}
+.atk-out .big{font-weight:600;font-size:16px}
+.toggles{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px}
+.toggles label{display:flex;gap:6px;align-items:center;font-size:14px;cursor:pointer}
+
+/* claims explorer */
+.claims{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@media (min-width:640px){.claims{grid-template-columns:200px minmax(0,1fr)}}
+.claims .list{display:flex;flex-direction:column;gap:2px;max-height:360px;overflow:auto}
+.claims .list button{text-align:left;font:13px/1.3 var(--mono);border:0;background:none;padding:6px 8px;border-radius:3px;cursor:pointer;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px}
+.claims .list button:hover{background:var(--br-soft)}
+.claims .list button.on{background:var(--idp-soft);color:var(--idp)}
+.claims .list .src{font:11px var(--sans);color:var(--muted)}
+.claims .info h5{font:600 16px var(--mono);margin:0 0 6px}
+.claims .info .v{font:12.5px/1.5 var(--mono);background:var(--code);padding:6px 8px;border-radius:3px;overflow-wrap:anywhere}
+.claims .info dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 12px;margin:10px 0 0;font-size:14px}
+.claims .info dt{color:var(--muted)}.claims .info dd{margin:0}
+
+/* timeline */
+.tl{position:relative;margin:18px 0 6px}
+.tl .bar{position:relative;height:26px;margin:8px 0;border-radius:3px;background:var(--rule-2)}
+.tl .bar i{position:absolute;top:0;bottom:0;border-radius:3px}
+.tl .bar .lbl{position:absolute;left:8px;top:4px;font:600 12px/18px var(--sans);color:var(--ink);white-space:nowrap;pointer-events:none}
+.tl .marker{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--bad)}
+.tl .axis{display:flex;justify-content:space-between;font:12px var(--mono);color:var(--muted)}
+.tl-out{margin-top:10px;font-size:15px}
+
+/* decision helper / checklist / glossary / flashcards */
+.dh .qq{margin:10px 0}
+.dh .qq p{margin:0 0 6px;font-weight:600}
+.dh-out{margin-top:12px;padding:12px;background:var(--idp-soft);border-radius:3px}
+.dh-out h5{margin:0 0 4px;font:600 16px var(--serif)}
+.cl{list-style:none;padding:0;margin:0}
+.cl li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:8px 0;border-bottom:1px solid var(--rule-2);font:15px/1.5 var(--sans)}
+.cl input{margin-top:4px;accent-color:var(--idp)}
+.cl li.done span{color:var(--muted);text-decoration:line-through}
+.gloss dl{margin:0}
+.gloss dt{font:600 15px/1.4 var(--sans);margin-top:12px}
+.gloss dd{margin:2px 0 0;font-size:16px}
+.gloss dd a{font:13px var(--sans)}
+.cards{display:grid;place-items:center;margin-top:8px}
+.card{width:100%;max-width:520px;min-height:190px;border:1px solid var(--rule);border-radius:4px;background:var(--bg);
+  padding:22px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;cursor:pointer}
+.card .face{font:600 22px/1.3 var(--serif)}
+.card .back{font:16.5px/1.5 var(--serif)}
+.card .hint{font:12px var(--sans);color:var(--muted);margin-top:12px}
+
+/* concept map */
+.cmap svg{display:block;width:100%;height:auto;min-width:640px}
+.cmap .node{cursor:pointer}
+.cmap .node rect{stroke-width:1.5}
+.cmap .node text{font:600 13px var(--sans);pointer-events:none}
+.cmap .edge{stroke:var(--rule);stroke-width:1.5;fill:none}
+.cmap .edge.hot{stroke:var(--idp);stroke-width:2}
+.cmap .elbl{font:11.5px var(--sans);fill:var(--muted)}
+.cmap .elbl.hot{fill:var(--idp)}
+.cmap .dim{opacity:.25}
+.cmap-info{min-height:52px;margin-top:10px;font-size:15px}
+
+/* diagrams */
+.dg text{font-family:var(--sans)}
+.dg .t-s{font-size:12px;fill:var(--muted)}
+.dg .t-m{font-size:13px;fill:var(--ink)}
+.dg .t-b{font-size:14px;font-weight:600;fill:var(--ink)}
+
+/* summary / references */
+ol.summary li{margin:6px 0}
+.refs li{margin:6px 0;font-size:16px}
+.small{font-size:15px;color:var(--muted)}
+hr.sep{border:0;border-top:1px solid var(--rule);margin:40px 0}
+
+/* RSA companion page: the chapter's design, plus colours for public / private / message values
+   and the widgets below. Public = the identity provider's indigo (anyone may know it),
+   private = the chapter's key amber, message and hash = the app's teal. */
+.c-pub{color:var(--idp)}.c-priv{color:var(--key)}.c-msg{color:var(--app)}
+b.c-pub,b.c-priv,b.c-msg,strong.c-pub,strong.c-priv{font-weight:650}
+.mn b.pub{color:var(--idp)}.mn b.priv{color:var(--key)}
+sup{font-size:.68em;line-height:0}
+.eq{font:400 21px/1.5 var(--serif);text-align:center;margin:20px 0;overflow-wrap:anywhere}
+.eq.small-eq{font-size:18px;margin:14px 0 8px;min-height:1.5em}
+ol.steps{padding-left:1.4em}
+ol.steps li{margin:6px 0}
+.pill{display:inline-block;min-width:2.4em;text-align:center;font:600 14px/1 var(--mono);background:var(--code);padding:6px 8px;border-radius:3px}
+.w p.f{font:600 12.5px/1.3 var(--sans);color:var(--muted);margin:10px 0 4px}
+.w input[type=range]{accent-color:var(--idp)}
+.w .small{font-size:13.5px}
+.stp{font:600 12px/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin:20px 0 6px;padding-top:12px;border-top:1px solid var(--rule-2)}
+.stp i,.stp sup{text-transform:none}
+.stp:first-of-type{margin-top:4px;padding-top:0;border-top:0}
+
+/* Figure 1.1: the circle */
+.cy-wrap{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:10px;align-items:start}
+@media (min-width:640px){.cy-wrap{grid-template-columns:minmax(0,300px) minmax(0,1fr)}}
+#cy-svg{display:block;width:100%;max-width:340px;height:auto;margin:0 auto}
+#cy-svg .dot{fill:var(--muted);opacity:.45}
+#cy-svg .dot.on{fill:var(--app);opacity:1}
+#cy-svg .dot.start{fill:var(--idp);opacity:1}
+#cy-svg .lbl{font:10.5px var(--mono);fill:var(--muted);text-anchor:middle;dominant-baseline:central}
+#cy-svg .lbl.on{fill:var(--ink);font-weight:600}
+#cy-svg .chord{stroke:var(--app);stroke-width:1.6;fill:none;opacity:.55}
+#cy-svg .chord.last{opacity:1;stroke-width:2.4}
+#cy-svg .ring{fill:none;stroke:var(--rule);stroke-width:1}
+.cy-side{min-width:0}
+.log{font:13px/1.6 var(--mono);margin-top:10px;max-height:240px;overflow:auto;overflow-wrap:anywhere}
+.log .hit{color:var(--ok);font-weight:600}
+
+/* cells: one per m */
+.cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:4px}
+.cell{border:1px solid var(--rule);background:var(--bg);border-radius:3px;padding:4px 2px;text-align:center;font:11.5px/1.25 var(--mono);color:var(--ink);cursor:default}
+button.cell{cursor:pointer}
+.cell b{display:block;font-size:12.5px}
+.cell span{color:var(--muted)}
+.cell.sel{outline:2px solid var(--idp);outline-offset:1px}
+.cell.ok{background:var(--ok-soft);border-color:transparent}
+.cell.bad{background:var(--bad-soft);border-color:transparent}
+.cell.bad span{color:var(--bad)}
+.cell.l1{background:var(--br-soft)}
+.cell.l2{background:var(--idp-soft)}
+.cell.l5{background:var(--app-soft)}
+.cell.l10{background:var(--key-soft)}
+
+/* key/value results */
+.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:5px 14px;margin:12px 0 0;font:14.5px/1.5 var(--sans)}
+.kv dt{color:var(--muted);white-space:nowrap}
+.kv dd{margin:0;min-width:0;font-family:var(--mono);font-size:13.5px;overflow-wrap:anywhere}
+.kv .note{font:13px/1.45 var(--sans);color:var(--muted);display:block}
+@media (max-width:480px){.kv{grid-template-columns:minmax(0,1fr);gap:0}.kv dt{margin-top:6px}}
+.kw-in{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+details.deep.inner{margin:14px 0 0;background:var(--bg)}
+details.deep.inner .in{font:14px/1.5 var(--sans)}
+.verdict{margin-top:12px;padding:10px 12px;border-radius:3px;font:15px/1.5 var(--sans)}
+.verdict.ok{background:var(--ok-soft)}.verdict.bad{background:var(--bad-soft)}
+.verdict b{font-weight:650}
+.verdict.ok b{color:var(--ok)}.verdict.bad b{color:var(--bad)}
+
+/* Figure 5.1: two sides */
+.two{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media (min-width:640px){.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.two.tight{gap:10px}
+.side{border-radius:3px;padding:12px;min-width:0}
+.priv-side{background:var(--key-soft)}
+.pub-side{background:var(--idp-soft)}
+.side-t{font:600 13px/1.3 var(--sans);margin:0 0 4px}
+.side textarea,.side input[type=text]{background:var(--paper)!important}
+
+/* Figure 6.2: the race */
+.race td,.race th{white-space:nowrap}
+.race td.n{font-family:var(--mono);font-size:13px}
+.race .barcol{width:40%;min-width:90px}
+.race .bar{display:block;height:9px;background:var(--app);border-radius:2px;min-width:2px}
+
+/* big numbers */
+.num{font:12px/1.5 var(--mono);background:var(--code);padding:8px 10px;border-radius:3px;max-height:7.6em;overflow:auto;overflow-wrap:anywhere;word-break:break-all}
+.num.pub{border-left:3px solid var(--idp)}
+.num.priv{border-left:3px solid var(--key)}
+.checks{display:flex;flex-direction:column;gap:4px;margin-top:10px;font:14px/1.5 var(--sans)}
+
+/* the 256-byte block */
+.blk{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:1px;margin-top:10px;font:11px/1.9 var(--mono);text-align:center;min-width:300px}
+.blk span{border-radius:2px}
+.bseg{font:12px/1.5 var(--mono);padding:1px 5px;border-radius:2px}
+.b-hd{background:var(--br);color:var(--paper)}
+.b-ff{background:var(--rule-2);color:var(--muted)}
+.b-di{background:var(--app2-soft);color:var(--app2)}
+.b-h{background:var(--app-soft);color:var(--app)}
+.b-x{background:var(--bad-soft);color:var(--bad);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font:12.5px/1.4 var(--sans);color:var(--muted)}
+.legend span{display:inline-flex;gap:5px;align-items:center}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px}
+.layout td:nth-child(2){font-family:var(--mono)}
+
+.colophon{margin:56px 0 40px;padding-top:16px;border-top:1px solid var(--rule);font:14px/1.6 var(--sans);color:var(--muted)}
+.colophon a{color:inherit}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="toc"><nav id="toc-nav" aria-label="Contents"></nav></aside>
+<main>
+<header class="title-page" id="top">
+  <p class="eyebrow">Single Sign-On with Entra ID · companion to §3.3</p>
+  <h1>How RSA Signatures Work</h1>
+  <p class="lede">The chapter said that signing "transforms the hash with the private key". This page opens that box. You build an RSA key from two small primes, sign with it, try to forge a signature, and then find the same arithmetic inside a real 2048-bit signature and inside an ID token.</p>
+  <p class="meta"><span><b>Reading</b> about 45 minutes</span><span><b>Lab</b> about 15 minutes</span><span><b>Prerequisites</b> <a href="../#s3-1">§3.1 of the chapter</a> (hash functions)</span><span><b>Checked</b> 26 October 2026</span></p>
+</header>
+
+<section class="chap" id="s0">
+<h3 style="margin-top:0">How this page works</h3>
+<p>All of RSA is one operation: raise a number to a power, divide by a fixed number, and keep the remainder. The two keys are two powers, chosen so that one undoes the other. <a href="#part1">Part I</a> builds that with numbers small enough to check in your head. <a href="#part2">Part II</a> turns it into signatures, attacks them the way a forger would, and opens a real signature. The <a href="#r11">lab</a> repeats the important steps on your own computer with Python and OpenSSL.</p>
+<p>Three colours stay the same everywhere: <b class="c-pub">public values</b> (indigo: anyone may know them), <b class="c-priv">private values</b> (amber: only the key's owner knows them) and <b class="c-msg">the message and its hash</b> (teal). Figures marked <span class="badge ok">Interactive</span> compute in your browser, and nothing you type leaves the page. Every Python command was run with Python 3.13, and its output is shown exactly as printed; none of them depends on the computer it runs on.</p>
+
+<h3>What you will be able to do</h3>
+<ol>
+  <li>Compute a remainder and a power modulo n, and explain why powers go round in cycles.</li>
+  <li>Make a small RSA key pair from two primes and check that it works.</li>
+  <li>Sign and verify by hand, and say exactly what the public key can and cannot do.</li>
+  <li>Explain why forging a signature needs the two primes, and why a 2048-bit key is out of reach.</li>
+  <li>Explain why real RSA wraps the hash in a fixed layout, and read the 256 bytes inside a real RS256 signature.</li>
+  <li>Check a token's signature with a few lines of Python.</li>
+</ol>
+</section>
+
+<div class="part" id="part1">
+  <p class="eyebrow">Part I</p>
+  <h2>The arithmetic</h2>
+  <p>Three ideas, with numbers small enough to check by hand. Real RSA uses exactly these, with numbers 617 digits long.</p>
+</div>
+
+<!-- ================================================================ §1 -->
+<section class="chap" id="r1" data-toc="Remainders and powers">
+<h2 class="sec"><span class="n">1</span>Remainders: the one operation RSA uses</h2>
+<p class="why"><b>Why you need this</b>RSA's two keys are two exponents, and every result is a remainder. Once remainders and powers are clear, the rest of the page is bookkeeping.</p>
+
+<h3 id="r1-1"><span class="n">1.1</span>Remainders</h3>
+<aside class="mn"><b>mod</b><i>a</i> mod <i>n</i> is the remainder after dividing <i>a</i> by <i>n</i>. Python writes it <code>a % n</code>.<b class="pub">Modulus</b>The number you divide by. In RSA it is called <i>n</i>, and it is part of the public key.</aside>
+<p>Divide 17 by 5: 5 fits three times (15), and 2 is left over. That leftover is the <strong>remainder</strong>, written <strong>17 mod 5 = 2</strong> and read "17 modulo 5". The number you divide by, here 5, is the <strong>modulus</strong>. In Python the operator is <code>%</code>:</p>
+<div class="cmd" data-check><pre>python3 -c "print(17 % 5, 40 % 33, 66 % 33)"</pre></div>
+<pre class="out">2 7 0</pre>
+<p>A remainder modulo <i>n</i> is always between 0 and <i>n</i> − 1. With modulus 33 there are only 33 possible results, 0 to 32, and counting past 32 wraps round to 0, the way hours on a clock wrap after 12. RSA's modulus <i>n</i> is a 617-digit number for a real key, so its "clock" has that many positions, but it wraps in the same way.</p>
+
+<h3 id="r1-2"><span class="n">1.2</span>Powers, then the remainder</h3>
+<p>RSA raises numbers to powers. <strong><i>m</i><sup><i>e</i></sup> mod <i>n</i></strong> means: multiply <i>m</i> by itself <i>e</i> times, then take the remainder. 7<sup>2</sup> = 49, and 49 mod 33 = 16. Python's <code>pow</code> does both when you give it the modulus as a third argument:</p>
+<div class="cmd" data-check><pre>python3 -c "print(7 ** 2, 7 ** 2 % 33, pow(7, 2, 33))"</pre></div>
+<pre class="out">49 16 16</pre>
+<p>The three-argument form is what makes RSA possible. You may take the remainder after every single multiplication and the final answer is the same, so the numbers never grow beyond <i>n</i><sup>2</sup>. That's how a computer raises a 617-digit number to a 617-digit power in a few milliseconds. Written out in full, the power would have more digits than there are atoms in the universe; <code>pow(m, d, n)</code> never holds a number bigger than <i>n</i><sup>2</sup>.</p>
+<details class="deep"><summary><span class="t">Going deeper</span>How a computer computes a huge power quickly</summary><div class="in">
+<p>To compute 7<sup>13</sup> mod 33, don't multiply 7 by itself twelve times. Write 13 in binary, 1101, which says 13 = 8 + 4 + 1. Square three times to get 7<sup>2</sup>, 7<sup>4</sup> and 7<sup>8</sup>, then multiply the ones you need: 7<sup>8</sup> × 7<sup>4</sup> × 7<sup>1</sup>. That's five multiplications instead of twelve, each followed by a remainder. The method is called <strong>square and multiply</strong>.</p>
+<div class="cmd" data-check><pre>python3 -c "print(pow(7, 13, 33), 7 ** 8 * 7 ** 4 * 7 % 33)"</pre></div>
+<pre class="out">13 13</pre>
+<p>For an exponent of 2,048 bits it takes about 2,048 squarings and at most 2,048 more multiplications. Counting up to the exponent one step at a time would need a number of multiplications with 617 digits.</p>
+</div></details>
+
+<h3 id="r1-3"><span class="n">1.3</span>Powers go round in cycles</h3>
+<aside class="mn"><b>Cycle length</b>How many more multiplications by <i>m</i> it takes for <i>m</i><sup><i>k</i></sup> mod <i>n</i> to come back to <i>m</i>.</aside>
+<p>Take <i>m</i> = 2 with modulus 33, keep multiplying by 2, and take the remainder each time:</p>
+<div class="cmd" data-check><pre>python3 -c "print([pow(2, k, 33) for k in range(1, 12)])"</pre></div>
+<pre class="out">[2, 4, 8, 16, 32, 31, 29, 25, 17, 1, 2]</pre>
+<p>After ten multiplications it's back at 2, and from there it repeats the same ten numbers forever. Every <i>m</i> does this; only the <strong>cycle length</strong> differs. Figure 1.1 draws it. Pick an <i>m</i> and step through its powers, then look at the row of cycle lengths underneath.</p>
+
+<figure id="fig-cycle">
+  <div class="w">
+    <p class="wt"><span>Figure 1.1 · Powers of <i>m</i> modulo 33</span><span class="live">Interactive</span></p>
+    <div class="row">
+      <label for="cy-m" style="font-weight:600"><i>m</i> =</label>
+      <input type="range" id="cy-m" min="0" max="32" value="2" style="flex:1;min-width:140px">
+      <output id="cy-mv" class="pill">2</output>
+    </div>
+    <div class="cy-wrap">
+      <svg id="cy-svg" viewBox="0 0 400 400" role="img" aria-label="The numbers 0 to 32 on a circle, with the powers of m joined in order"></svg>
+      <div class="cy-side">
+        <div class="row"><button type="button" class="btn pri" id="cy-step">Multiply by <i>m</i> once more</button><button type="button" class="btn" id="cy-run">Run to the end</button><button type="button" class="btn" id="cy-reset">Start again</button></div>
+        <div class="log" id="cy-log" aria-live="polite"></div>
+      </div>
+    </div>
+    <p class="f" style="margin-top:14px">Cycle length of every <i>m</i> (select one to draw it)</p>
+    <div class="cells" id="cy-cells"></div>
+    <p class="small" id="cy-note" style="margin:10px 0 0"></p>
+  </div>
+  <figcaption><b>Figure 1.1.</b> Each step multiplies by <i>m</i> and takes the remainder mod 33. The path always closes, and every cycle length is 1, 2, 5 or 10.</figcaption>
+</figure>
+
+<p>For modulus 33 the cycle lengths are only 1, 2, 5 and 10, and each of them divides 10. So after 10 more steps <em>every</em> <i>m</i> is back where it started: <i>m</i><sup>11</sup> mod 33 = <i>m</i> for all 33 values. The same holds for <i>m</i><sup>21</sup>, <i>m</i><sup>31</sup>, and any exponent that is 1 more than a multiple of 10:</p>
+<div class="cmd" data-check><pre>python3 -c "print(all(pow(m, 11, 33) == m for m in range(33)))"</pre></div>
+<pre class="out">True</pre>
+<div class="key"><p class="k">The fact RSA is built on</p><p>For a modulus <i>n</i> like 33 there is a number <i>L</i>, a cycle length that works for every <i>m</i> at once. Then <i>m</i><sup>1 + <i>k</i>·<i>L</i></sup> mod <i>n</i> = <i>m</i> for every <i>m</i> and every whole number <i>k</i>. For <i>n</i> = 33, <i>L</i> = 10.</p></div>
+
+<div class="check" data-quiz>
+  <p class="k">Check yourself</p>
+  <div class="q" data-answer="0">
+    <p class="qt">What does <code>pow(5, 3, 33)</code> print?</p>
+    <div class="opts"><button type="button">26</button><button type="button">15</button><button type="button">125</button></div>
+    <p class="fb" hidden data-fb="Right. 5³ = 125 = 3 × 33 + 26." data-fb-wrong="5³ = 125, and 125 = 3 × 33 + 26, so the remainder is 26."></p>
+  </div>
+  <div class="q" data-answer="1">
+    <p class="qt">With modulus 33, which exponent gives back every <i>m</i> unchanged?</p>
+    <div class="opts"><button type="button">10</button><button type="button">11</button><button type="button">33</button></div>
+    <p class="fb" hidden data-fb="Right. 11 = 1 + 10: the m you started with, plus one full cycle." data-fb-wrong="m¹⁰ lands on 1 for most m, one full cycle past m⁰ = 1. You need one step more: 11."></p>
+  </div>
+</div>
+</section>
+
+<!-- ================================================================ §2 -->
+<section class="chap" id="r2" data-toc="Two exponents, one key pair">
+<h2 class="sec"><span class="n">2</span>Two exponents that undo each other</h2>
+<p class="why"><b>Why you need this</b>This is RSA's central trick. Once you have seen it with 33, a real key is the same thing with bigger numbers.</p>
+
+<h3 id="r2-1"><span class="n">2.1</span>Split the exponent in two</h3>
+<aside class="mn"><b class="pub">Public exponent <i>e</i></b>The power anyone may use.<b class="priv">Private exponent <i>d</i></b>The power that undoes <i>e</i>. Only the key's owner knows it.</aside>
+<p>Every exponent of the form 1 + <i>k</i>·10 returns every <i>m</i> modulo 33. Pick one that splits into two factors: 21 = 3 × 7. Raising to the 21st power can then be done in two stages, first to the 3rd power and then the result to the 7th, because (<i>m</i><sup>3</sup>)<sup>7</sup> = <i>m</i><sup>21</sup>:</p>
+<p class="eq"><i class="c-msg">m</i> → <i>c</i> = <i class="c-msg">m</i><sup class="c-pub">3</sup> mod 33 → <i>c</i><sup class="c-priv">7</sup> mod 33 = <i class="c-msg">m</i></p>
+<p>The first stage scrambles <i>m</i>, and the second brings it back. With <i>m</i> = 4: 4<sup>3</sup> = 64, and 64 mod 33 = 31. Then 31<sup>7</sup> mod 33 = 4:</p>
+<div class="cmd" data-check><pre>python3 -c "c = pow(4, 3, 33); print(c, pow(c, 7, 33))"</pre></div>
+<pre class="out">31 4</pre>
+<p>These are the two exponents of an RSA key: the <strong class="c-pub">public exponent</strong> <i>e</i> = 3 and the <strong class="c-priv">private exponent</strong> <i>d</i> = 7. The order doesn't matter, since (<i>m</i><sup>7</sup>)<sup>3</sup> is also <i>m</i><sup>21</sup>. Signatures use <i>d</i> first and <i>e</i> second (§5).</p>
+<p>The rule the pair follows: <strong><i>e</i> × <i>d</i> must be 1 more than a multiple of <i>L</i></strong>, written <strong><i>e</i> × <i>d</i> mod <i>L</i> = 1</strong>. Here 3 × 7 = 21, and 21 mod 10 = 1.</p>
+<p>A counter-example: <i>e</i> = 3 and <i>d</i> = 5 gives 3 × 5 = 15, and 15 mod 10 = 5, not 1. Start with <i>m</i> = 2:</p>
+<div class="cmd" data-check><pre>python3 -c "c = pow(2, 3, 33); print(c, pow(c, 5, 33))"</pre></div>
+<pre class="out">8 32</pre>
+<p>2 went in and 32 came out. Figure 2.1 tries several pairs on all 33 numbers at once.</p>
+
+<figure id="fig-lock">
+  <div class="w">
+    <p class="wt"><span>Figure 2.1 · Scramble and unscramble modulo 33</span><span class="live">Interactive</span></p>
+    <div class="row"><span style="font-weight:600">Exponents</span><div class="seg" role="group" aria-label="Exponent pair" id="lk-pairs"></div></div>
+    <div class="row" style="margin-top:10px">
+      <label for="lk-m" style="font-weight:600"><i>m</i> =</label>
+      <input type="range" id="lk-m" min="0" max="32" value="4" style="flex:1;min-width:140px">
+      <output id="lk-mv" class="pill">4</output>
+    </div>
+    <p class="eq small-eq" id="lk-out" aria-live="polite"></p>
+    <p id="lk-rule" style="margin:0 0 10px"></p>
+    <div class="cells" id="lk-cells"></div>
+    <p id="lk-sum" style="margin:10px 0 0;font-weight:600"></p>
+  </div>
+  <figcaption><b>Figure 2.1.</b> Each cell is one <i>m</i> from 0 to 32, after scrambling with <i>e</i> and unscrambling with <i>d</i>. Green: it came back. Red: it didn't, and the cell shows what came out instead. Only pairs with <i>e</i> × <i>d</i> mod 10 = 1 bring all 33 back.</figcaption>
+</figure>
+
+<h3 id="r2-2"><span class="n">2.2</span>What is public and what is secret</h3>
+<p>In this toy key the <span class="c-pub">public key</span> is <i>n</i> = 33 with <i>e</i> = 3, and the <span class="c-priv">private key</span> is <i>d</i> = 7. Anyone may compute <i>m</i><sup>3</sup> mod 33. Undoing it takes <i>d</i>. As §5 shows, the owner can also do the private step first, so that anyone can undo it with <i>e</i>. That is a signature.</p>
+<p>With <i>n</i> = 33 an attacker would simply try <i>d</i> = 1, 2, 3 and so on. That's one reason real keys use a 617-digit <i>n</i>. But trying isn't the only way: anyone who knows <i>L</i> can compute <i>d</i> in one quick step (§4). So the real question is whether someone who sees only <i>n</i> can work out <i>L</i>. The next section answers it.</p>
+
+<div class="check" data-quiz>
+  <p class="k">Check yourself</p>
+  <div class="q" data-answer="0">
+    <p class="qt">Modulus 33, so <i>L</i> = 10, and <i>e</i> = 7. Which <i>d</i> undoes it?</p>
+    <div class="opts"><button type="button">3</button><button type="button">7</button><button type="button">10</button></div>
+    <p class="fb" hidden data-fb="Right. 7 × 3 = 21, and 21 mod 10 = 1." data-fb-wrong="Check e × d mod 10. 7 × 3 = 21 gives 1; 7 × 7 = 49 gives 9; 7 × 10 = 70 gives 0."></p>
+  </div>
+</div>
+</section>
+
+<!-- ================================================================ §3 -->
+<section class="chap" id="r3" data-toc="Primes and the cycle length">
+<h2 class="sec"><span class="n">3</span>Where the cycle length comes from</h2>
+<p class="why"><b>Why you need this</b>To build a key you need <i>L</i> without trying every <i>m</i>. And the reason nobody else can find <i>d</i> is that <i>L</i> needs a secret: the two primes that make up <i>n</i>.</p>
+
+<h3 id="r3-1"><span class="n">3.1</span>Cycles modulo a prime</h3>
+<aside class="mn"><b class="priv">Prime</b>A whole number above 1 that only 1 and itself divide: 2, 3, 5, 7, 11, 13 and so on.</aside>
+<p>When the modulus is a <strong>prime</strong> <i>p</i>, every cycle length divides <i>p</i> − 1. This is <strong>Fermat's little theorem</strong>, from 1640: <i>m</i><sup><i>p</i>−1</sup> mod <i>p</i> = 1 for every <i>m</i> that <i>p</i> doesn't divide. With <i>p</i> = 11, the tenth power of every <i>m</i> from 1 to 10 is 1:</p>
+<div class="cmd" data-check><pre>python3 -c "print([pow(m, 10, 11) for m in range(1, 11)])"</pre></div>
+<pre class="out">[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]</pre>
+
+<h3 id="r3-2"><span class="n">3.2</span>Cycles modulo <i>p</i> × <i>q</i></h3>
+<aside class="mn"><b>lcm</b>Least common multiple: the smallest number that both numbers divide. lcm(2, 10) = 10 and lcm(60, 52) = 780.</aside>
+<p>RSA's modulus is the product of two different primes: 33 = 3 × 11. A number's remainder mod 33 is fixed by its two remainders mod 3 and mod 11. This is the <strong>Chinese remainder theorem</strong>: if you know <i>m</i> mod 3 and <i>m</i> mod 11, you know <i>m</i> mod 33. So <i>m</i><sup><i>k</i></sup> is back at <i>m</i> mod 33 exactly when it is back mod 3 <em>and</em> mod 11.</p>
+<p>Mod 3, cycles divide 3 − 1 = 2. Mod 11, they divide 11 − 1 = 10. Both are complete after any number of steps that both 2 and 10 divide, and the smallest such number is their least common multiple: lcm(2, 10) = 10. That's the 10 you found in Figure 1.1:</p>
+<p class="eq"><i class="c-priv">L</i> = lcm(<i class="c-priv">p</i> − 1, <i class="c-priv">q</i> − 1)</p>
+<div class="cmd" data-check><pre>python3 -c "import math; print(math.lcm(3 - 1, 11 - 1))"</pre></div>
+<pre class="out">10</pre>
+<p>Mathematicians call this number the <strong>Carmichael function</strong> of <i>n</i>, written λ(<i>n</i>). This page calls it <i>L</i>.</p>
+<div class="key"><p class="k">Why the private key stays private</p><p>With <i>p</i> and <i>q</i>, computing <i>L</i> takes microseconds. With only <i>n</i>, you must first split <i>n</i> back into <i>p</i> and <i>q</i>, which is called <strong>factoring</strong>, and for a 617-digit <i>n</i> nobody can (§6). Everything follows from that: without <i>p</i> and <i>q</i> there is no <i>L</i>, and without <i>L</i> there is no <i>d</i>.</p></div>
+<details class="deep"><summary><span class="t">Going deeper</span>φ(<i>n</i>): the version in most textbooks</summary><div class="in">
+<p>Many books, and Wikipedia, use <strong>φ(<i>n</i>) = (<i>p</i> − 1)(<i>q</i> − 1)</strong>, Euler's totient, instead of <i>L</i>. φ(<i>n</i>) is always a multiple of <i>L</i> (for 33 it is 20, against 10), so a <i>d</i> with <i>e</i> × <i>d</i> mod φ(<i>n</i>) = 1 also works. OpenSSL and most current libraries use <i>L</i>, as NIST's rules for RSA keys require (FIPS 186-4 and SP 800-56B), and that gives a smaller <i>d</i>. Your own key in the lab follows this rule, so a check with <i>L</i> always passes for it, while a check with φ passes only by chance.</p>
+</div></details>
+<details class="deep"><summary><span class="t">Going deeper</span>Why it also works when <i>m</i> shares a factor with <i>n</i></summary><div class="in">
+<p>Fermat's theorem skips any <i>m</i> that <i>p</i> divides. Take <i>m</i> = 3 and <i>n</i> = 33. Mod 3 its remainder is 0, and 0 stays 0 at every power. Mod 11 it cycles normally. Both remainders are back where they started after any multiple of <i>L</i> steps, so 3<sup>1 + <i>k</i>·<i>L</i></sup> mod 33 = 3 as well. That's why the check in §1.3 passed for all 33 numbers, 0 included.</p>
+</div></details>
+
+<div class="check" data-quiz>
+  <p class="k">Check yourself</p>
+  <div class="q" data-answer="0">
+    <p class="qt"><i>p</i> = 5 and <i>q</i> = 7, so <i>n</i> = 35. What is <i>L</i>?</p>
+    <div class="opts"><button type="button">12</button><button type="button">24</button><button type="button">35</button></div>
+    <p class="fb" hidden data-fb="Right. lcm(4, 6) = 12." data-fb-wrong="L = lcm(p − 1, q − 1) = lcm(4, 6) = 12. 24 is φ(35), which also works but isn't the smallest."></p>
+  </div>
+  <div class="q" data-answer="1">
+    <p class="qt">An attacker has <i>n</i> and <i>e</i>. What stops them computing <i>d</i>?</p>
+    <div class="opts"><button type="button"><i>d</i> is encrypted inside the key file</button><button type="button">Computing <i>d</i> needs <i>L</i>, which needs <i>p</i> and <i>q</i>, which means factoring <i>n</i></button><button type="button"><i>e</i> is too large to invert</button></div>
+    <p class="fb" hidden data-fb="Right. The whole of RSA's security is that chain." data-fb-wrong="Inverting e is quick once L is known (§4). The obstacle is L itself: it needs p and q, and finding them means factoring n."></p>
+  </div>
+</div>
+</section>
+
+<!-- ================================================================ §4 -->
+<section class="chap" id="r4" data-toc="Making a key pair">
+<h2 class="sec"><span class="n">4</span>Making a key pair</h2>
+<p class="why"><b>Why you need this</b>The recipe has six steps. Each produces a number you'll see again as a named field in a real key file in the lab.</p>
+
+<h3 id="r4-1"><span class="n">4.1</span>The recipe</h3>
+<aside class="mn"><b class="priv">Modular inverse</b>The inverse of <i>e</i> modulo <i>L</i> is the number <i>d</i> with <i>e</i> × <i>d</i> mod <i>L</i> = 1. It exists only when <i>e</i> and <i>L</i> have no common factor.</aside>
+<ol class="steps">
+  <li>Choose two large random primes, <b class="c-priv">p</b> and <b class="c-priv">q</b>. For a real key, 1,024 bits each (about 309 digits).</li>
+  <li>Multiply them: <b class="c-pub">n = p × q</b>. For a real key, 2,048 bits (617 digits). This is the "2048" in "RSA-2048".</li>
+  <li>Compute <b class="c-priv">L = lcm(p − 1, q − 1)</b>.</li>
+  <li>Choose <b class="c-pub">e</b> with no common factor with <i>L</i>. Almost every key uses <i>e</i> = 65537.</li>
+  <li>Compute <b class="c-priv">d</b>, the number with <i>e</i> × <i>d</i> mod <i>L</i> = 1. It's called the <strong>inverse of <i>e</i> modulo <i>L</i></strong>, and Python computes it with <code>pow(e, -1, L)</code>.</li>
+  <li>Publish <i>n</i> and <i>e</i>. Keep <i>d</i> secret, together with <i>p</i> and <i>q</i>, which make signing faster (§8).</li>
+</ol>
+<p>With <i>p</i> = 61 and <i>q</i> = 53: <i>n</i> = 3233, <i>L</i> = lcm(60, 52) = 780, <i>e</i> = 17 and <i>d</i> = 413. Check: 17 × 413 = 7021 = 9 × 780 + 1.</p>
+<div class="cmd" data-check><pre>python3 -c "import math; p, q, e = 61, 53, 17; n = p * q; L = math.lcm(p - 1, q - 1); print(n, L, pow(e, -1, L))"</pre></div>
+<pre class="out">3233 780 413</pre>
+<p>This is the toy key for the rest of the page. Figure 4.1 runs the recipe for any <i>p</i>, <i>q</i> and <i>e</i>, then checks whether every <i>m</i> survives the round trip. The last three presets are mistakes. Try them to see what breaks.</p>
+
+<figure id="fig-keys">
+  <div class="w">
+    <p class="wt"><span>Figure 4.1 · Key workshop</span><span class="live">Interactive</span></p>
+    <div class="row" id="kw-presets"></div>
+    <div class="kw-in">
+      <div><label class="f" for="kw-p"><i>p</i> (prime)</label><input type="text" inputmode="numeric" id="kw-p" value="61"></div>
+      <div><label class="f" for="kw-q"><i>q</i> (prime)</label><input type="text" inputmode="numeric" id="kw-q" value="53"></div>
+      <div><label class="f" for="kw-e"><i>e</i></label><select id="kw-e"><option>3</option><option>5</option><option>7</option><option selected>17</option><option>257</option><option>65537</option></select></div>
+    </div>
+    <dl class="kv" id="kw-out"></dl>
+    <details class="deep inner"><summary><span class="t">Steps</span>How <i>d</i> was found (extended Euclidean algorithm)</summary><div class="in" id="kw-euclid"></div></details>
+    <div id="kw-check" aria-live="polite"></div>
+  </div>
+  <figcaption><b>Figure 4.1.</b> All arithmetic uses exact big integers. The round trip checks every <i>m</i> below <i>n</i> when <i>n</i> is at most 20,000, and otherwise 3,000 values including the hardest ones. For <i>p</i> = 61 and <i>q</i> = 53, <i>L</i> = 780 = 2<sup>2</sup> × 3 × 5 × 13, so <i>e</i> = 3 and <i>e</i> = 5 have no <i>d</i>.</figcaption>
+</figure>
+
+<details class="deep"><summary><span class="t">Going deeper</span>Finding <i>d</i>: the extended Euclidean algorithm</summary><div class="in">
+<p>Python's <code>pow(e, -1, L)</code> runs an extended form of an algorithm from Euclid's <i>Elements</i>, about 300 BC. First divide repeatedly, each time dividing the previous divisor by the remainder:</p>
+<pre class="code">780 = 45 × 17 + 15
+ 17 =  1 × 15 + 2
+ 15 =  7 × 2  + 1</pre>
+<p>The last remainder is 1, which proves that 17 and 780 have no common factor. Now work back up, writing 1 in terms of 17 and 780:</p>
+<pre class="code">1 = 15 − 7 × 2
+  = 15 − 7 × (17 − 15)       = 8 × 15 − 7 × 17
+  = 8 × (780 − 45 × 17) − 7 × 17 = 8 × 780 − 367 × 17</pre>
+<p>So 17 × (−367) is 1 more than a multiple of 780, and −367 + 780 = 413 is the positive answer. It takes about as many steps as <i>L</i> has digits, so it is instant even for real keys.</p>
+</div></details>
+
+<h3 id="r4-2"><span class="n">4.2</span>Real keys</h3>
+<aside class="mn"><b>Miller–Rabin test</b>A fast test of whether a number is prime. Each round that a composite number passes by luck has at most a 1 in 4 chance, so a few dozen rounds make an error practically impossible.</aside>
+<p>A real key runs the same recipe with 1,024-bit primes. To find one, a program picks a random odd 1,024-bit number and tests whether it's prime, again and again. About 1 in 355 such numbers is prime, and the <strong>Miller–Rabin test</strong> checks a candidate in a fraction of a millisecond without factoring it. When OpenSSL makes a key in the lab, the dots and plus signs it prints are its progress through this search.</p>
+<p>Why <i>e</i> = 65537: it is 2<sup>16</sup> + 1, which in binary is a 1, fifteen 0s and a 1. Raising to it takes only 17 multiplications (16 squarings and one more), so verifying is fast, and verifying is what your app does on every request. <i>d</i> has about 2,048 bits, so signing is slower (§8).</p>
+
+<div class="check" data-quiz>
+  <p class="k">Check yourself</p>
+  <div class="q" data-answer="1">
+    <p class="qt"><i>p</i> = 61 and <i>q</i> = 53, so <i>L</i> = 780. Why can't <i>e</i> be 3?</p>
+    <div class="opts"><button type="button">3 is too small to be secure</button><button type="button">3 divides 780, so no <i>d</i> with 3 × <i>d</i> mod 780 = 1 exists</button><button type="button"><i>e</i> must be larger than <i>p</i></button></div>
+    <p class="fb" hidden data-fb="Right. 3 × d is always a multiple of 3, and so is 780, so 3 × d mod 780 can never be 1." data-fb-wrong="The problem is arithmetic, not size: 3 × d is always a multiple of 3, and so is 780, so the remainder 3 × d mod 780 can never be 1. Try e = 3 in Figure 4.1."></p>
+  </div>
+</div>
+</section>
+
+<div class="part" id="part2">
+  <p class="eyebrow">Part II</p>
+  <h2>Signatures</h2>
+  <p>Signing and verifying, how a forger would attack, why real RSA wraps the hash in a fixed layout, and the same arithmetic inside a real 2048-bit signature and an ID token.</p>
+</div>
+
+<!-- ================================================================ §5 -->
+<section class="chap" id="r5" data-toc="Signing and verifying">
+<h2 class="sec"><span class="n">5</span>Signing and verifying</h2>
+<p class="why"><b>Why you need this</b>Here the chapter's sentence, "transform the hash with the private key", becomes one line of arithmetic.</p>
+
+<h3 id="r5-1"><span class="n">5.1</span>Three steps</h3>
+<ol class="steps">
+  <li><b class="c-msg">Hash</b>: <i class="c-msg">h</i> = SHA-256(message), read as one big number.</li>
+  <li><b class="c-priv">Sign</b>, with the private key: <i>s</i> = <i class="c-msg">h</i><sup class="c-priv">d</sup> mod <i class="c-pub">n</i>. The signature <i>s</i> travels with the message.</li>
+  <li><b class="c-pub">Verify</b>, with the public key: compute <i>s</i><sup class="c-pub">e</sup> mod <i class="c-pub">n</i>, and compare it with the hash of the message you received.</li>
+</ol>
+<p>Verifying works because <i>s</i><sup><i>e</i></sup> = (<i>h</i><sup><i>d</i></sup>)<sup><i>e</i></sup> = <i>h</i><sup><i>d</i>·<i>e</i></sup>, and <i>d</i> × <i>e</i> = 1 + <i>k</i>·<i>L</i>, so the result is <i>h</i> again (§1.3). If the message was changed, its hash is a different number. If the signature was made with another key, <i>s</i><sup><i>e</i></sup> is some unrelated number. Either way the comparison fails.</p>
+<p>One shortcut for the toy key: SHA-256 gives a 256-bit number, far bigger than <i>n</i> = 3233, so the toy uses <i>h</i> = SHA-256 mod 3233. Real RSA never does this, and §7 shows what it does instead. Sign the chapter's example message:</p>
+<div class="cmd" data-check><pre>python3 - &lt;&lt;'EOF'
+import hashlib
+n, e, d = 3233, 17, 413
+h = int(hashlib.sha256(b'{"name":"Alice Example","roles":["Admin"]}').hexdigest(), 16) % n
+s = pow(h, d, n)
+print("h =", h, " s =", s, " check =", pow(s, e, n))
+EOF</pre></div>
+<pre class="out">h = 173  s = 2142  check = 173</pre>
+<p>The message's SHA-256 starts <code>9e3b67e7…</code>, which mod 3233 is <i>h</i> = 173. The signature is <i>s</i> = 173<sup>413</sup> mod 3233 = 2142, and 2142<sup>17</sup> mod 3233 gives back 173.</p>
+
+<figure id="fig-toysign">
+  <div class="w">
+    <p class="wt"><span>Figure 5.1 · Sign and verify by hand (toy key <i>n</i> = 3233)</span><span class="live">Interactive</span></p>
+    <div class="two">
+      <div class="side priv-side">
+        <p class="side-t">Alice's side · has <i class="c-priv">d</i> = 413</p>
+        <label class="f" for="ts-msg">Message</label>
+        <textarea id="ts-msg" rows="2" spellcheck="false">{"name":"Alice Example","roles":["Admin"]}</textarea>
+        <button type="button" class="btn pri" id="ts-sign" style="margin-top:8px">Sign and send</button>
+        <dl class="kv" id="ts-out"></dl>
+      </div>
+      <div class="side pub-side">
+        <p class="side-t">Your app's side · has <i class="c-pub">n</i> = 3233, <i class="c-pub">e</i> = 17</p>
+        <label class="f" for="tv-msg">Message received (edit it)</label>
+        <textarea id="tv-msg" rows="2" spellcheck="false"></textarea>
+        <label class="f" for="tv-sig">Signature received</label>
+        <input type="text" inputmode="numeric" id="tv-sig">
+        <dl class="kv" id="tv-out"></dl>
+      </div>
+    </div>
+  </div>
+  <figcaption><b>Figure 5.1.</b> Sign, then change <code>Admin</code> to <code>admin</code> on the right. The message's hash becomes 3080, but the signature still opens to 173. Or add 1 to the signature.</figcaption>
+</figure>
+
+<h3 id="r5-2"><span class="n">5.2</span>What the public key can and cannot do</h3>
+<p>With <i>n</i> and <i>e</i>, anyone can run step 3 for any message and signature. Running step 2 for a new message needs <i>h</i><sup><i>d</i></sup>, so it needs <i>d</i>. A forger has three things to try: guess <i>s</i> (§6.1), find <i>d</i> (§6.2), or exploit the formula itself (§7).</p>
+
+<div class="check" data-quiz>
+  <p class="k">Check yourself</p>
+  <div class="q" data-answer="0">
+    <p class="qt">Your app receives a message and its signature <i>s</i>. What does it compute with Entra's public key?</p>
+    <div class="opts"><button type="button"><i>s</i><sup><i>e</i></sup> mod <i>n</i>, which it compares with its own hash of the message</button><button type="button"><i>h</i><sup><i>d</i></sup> mod <i>n</i></button><button type="button">It decrypts the message</button></div>
+    <p class="fb" hidden data-fb="Right. The app never has d, and nothing is decrypted: the message was readable all along." data-fb-wrong="The app doesn't have d, and the message was never encrypted. It raises s to the public e and compares the result with the hash."></p>
+  </div>
+</div>
+</section>
+
+<!-- ================================================================ §6 -->
+<section class="chap" id="r6" data-toc="Forging: guessing and factoring">
+<h2 class="sec"><span class="n">6</span>Why forging is hard</h2>
+<p class="why"><b>Why you need this</b>Your app's trust in every Entra token rests on this. It also shows why key size matters.</p>
+
+<h3 id="r6-1"><span class="n">6.1</span>Guessing the signature</h3>
+<p>A forger wants an <i>s</i> with <i>s</i><sup><i>e</i></sup> mod <i>n</i> = <i>h</i>. They can compute <i>s</i><sup><i>e</i></sup> for any <i>s</i>, so they can try <i>s</i> = 0, 1, 2 and so on until one fits. The toy key has only 3,233 candidates:</p>
+<figure id="fig-guess">
+  <div class="w">
+    <p class="wt"><span>Figure 6.1 · Forge by trying every <i>s</i></span><span class="live">Interactive</span></p>
+    <p style="margin:0 0 10px" id="gs-target"></p>
+    <button type="button" class="btn pri" id="gs-run">Try s = 0, 1, 2, … with only <i>n</i> and <i>e</i></button>
+    <div id="gs-out" aria-live="polite" style="margin-top:10px"></div>
+  </div>
+  <figcaption><b>Figure 6.1.</b> The target is the hash of the message currently in Figure 5.1.</figcaption>
+</figure>
+<p>Only one <i>s</i> fits each <i>h</i>, so the forger finds exactly Alice's signature. For a 2,048-bit <i>n</i> there are about 3 × 10<sup>616</sup> candidates.</p>
+
+<h3 id="r6-2"><span class="n">6.2</span>Finding <i>d</i> by factoring <i>n</i></h3>
+<aside class="mn"><b>Trial division</b>Dividing <i>n</i> by 3, 5, 7, 9 and so on until one divides it exactly.<b>Number field sieve</b>The fastest known method for factoring large numbers on ordinary computers.</aside>
+<p>The other way is to recompute <i>d</i> as the owner did: <i>n</i> → <i>p</i> and <i>q</i> → <i>L</i> → <i>d</i>. Multiplying <i>p</i> by <i>q</i> takes microseconds; going back is the hard direction. The simplest method, <strong>trial division</strong>, divides <i>n</i> by 3, 5, 7, 9 and so on until one goes in exactly. Race it in your browser:</p>
+<figure id="fig-race">
+  <div class="w">
+    <p class="wt"><span>Figure 6.2 · Factoring race: trial division in your browser</span><span class="live">Interactive</span></p>
+    <button type="button" class="btn pri" id="fr-run">Start the race</button>
+    <div class="scroll" style="margin-top:10px"><table class="tbl race"><thead><tr><th>Bits of <i>n</i></th><th><i>n</i> = <i>p</i> × <i>q</i></th><th>Divisions</th><th>Time</th><th class="barcol"></th></tr></thead><tbody id="fr-rows"></tbody></table></div>
+    <p id="fr-sum" style="margin:10px 0 0" aria-live="polite"></p>
+  </div>
+  <figcaption><b>Figure 6.2.</b> Each <i>n</i> is the product of two new random primes of equal size. Every 4 more bits of <i>n</i> means about 4 times as many divisions.</figcaption>
+</figure>
+<p>Trial division is the slowest method there is. The fastest known one, the <strong>general number field sieve</strong>, is vastly faster, and the public records show what it can do. RSA-250, an 829-bit number, took about 2,700 CPU core-years in 2020. RSA-260, 862 bits, was factored in September 2026 on GPU clusters in about 4,900 GPU-days. Its author estimates that a 2,048-bit number is roughly a billion times harder than a 1,024-bit one, which he prices at about $30 million. 2,048-bit keys remain far out of reach.</p>
+<details class="deep"><summary><span class="t">Going deeper</span>What about quantum computers?</summary><div class="in">
+<p>Shor's algorithm (1994) would factor <i>n</i> quickly on a large, error-corrected quantum computer. Published runs on real quantum hardware have so far factored only tiny numbers, such as 21. Standards bodies are preparing anyway: NIST's draft transition plan (IR 8547, November 2024) proposes deprecating RSA-2048 after 2030 and disallowing it after 2035, with ML-DSA (FIPS 204) and SLH-DSA (FIPS 205) as replacement signature algorithms. For your apps that will arrive as new token algorithms in Entra and in your library, not as code you write.</p>
+</div></details>
+
+<div class="check" data-quiz>
+  <p class="k">Check yourself</p>
+  <div class="q" data-answer="0">
+    <p class="qt">Why are RSA keys 2,048 bits and not 64?</p>
+    <div class="opts"><button type="button">A 64-bit <i>n</i> can be factored in seconds, and <i>d</i> follows at once</button><button type="button">64-bit numbers are slower to compute with</button><button type="button">A 64-bit <i>e</i> would be too small</button></div>
+    <p class="fb" hidden data-fb="Right. Figure 6.2 factors 52-bit numbers in a fraction of a second." data-fb-wrong="Small numbers are faster, not slower, and e doesn't depend on the key size. The problem is factoring: Figure 6.2 factors 52-bit numbers in a fraction of a second."></p>
+  </div>
+</div>
+</section>
+
+<!-- ================================================================ §7 -->
+<section class="chap" id="r7" data-toc="Why real RSA pads the hash">
+<h2 class="sec"><span class="n">7</span>Why real RSA pads the hash</h2>
+<p class="why"><b>Why you need this</b>The formulas in §5 are called <strong>textbook RSA</strong>. Used exactly as written, they let a forger make valid signatures without <i>d</i>. The fix is a fixed layout around the hash, and it's what you'll find inside a real signature in §8.</p>
+
+<h3 id="r7-1"><span class="n">7.1</span>Signatures multiply</h3>
+<p>Powers multiply: <i>a</i><sup><i>d</i></sup> × <i>b</i><sup><i>d</i></sup> = (<i>a</i> × <i>b</i>)<sup><i>d</i></sup>. So if a forger holds two textbook signatures, one for <i>a</i> and one for <i>b</i>, their product mod <i>n</i> is a valid signature for <i>a</i> × <i>b</i>, and the forger never needed <i>d</i>. With the toy key, Alice's signatures for 6 and 7 are 2902 and 2667:</p>
+<div class="cmd" data-check><pre>python3 -c "print(2902 * 2667 % 3233, pow(2902 * 2667 % 3233, 17, 3233), pow(42, 413, 3233))"</pre></div>
+<pre class="out">3065 42 3065</pre>
+<p>The product, 3065, opens to 42 with the public key. It is exactly the signature Alice would have made for 42, a number she never signed.</p>
+<figure id="fig-mult">
+  <div class="w">
+    <p class="wt"><span>Figure 7.1 · Forge by multiplying (toy key)</span><span class="live">Interactive</span></p>
+    <div class="kw-in">
+      <div><label class="f" for="mf-a">Alice signed <i>a</i> =</label><input type="text" inputmode="numeric" id="mf-a" value="6"></div>
+      <div><label class="f" for="mf-b">Alice signed <i>b</i> =</label><input type="text" inputmode="numeric" id="mf-b" value="7"></div>
+    </div>
+    <dl class="kv" id="mf-out"></dl>
+  </div>
+  <figcaption><b>Figure 7.1.</b> The forger sees only the two signatures and the public key. Any <i>a</i> and <i>b</i> below 3233 work.</figcaption>
+</figure>
+
+<h3 id="r7-2"><span class="n">7.2</span>Starting from the signature</h3>
+<p>A forger can also work backwards: pick any <i>s</i> and compute <i>h</i> = <i>s</i><sup><i>e</i></sup> mod <i>n</i>. Now <i>s</i> is a valid textbook signature for that <i>h</i>. They can't choose <i>h</i>, and to use it they would need a message whose SHA-256 is exactly that number, which nobody can find (property 3 in <a href="../#s3-1">the chapter's §3.1</a>). Still, both tricks show that the arithmetic alone protects nothing. What protects a signature is what the verifier agrees to accept.</p>
+
+<h3 id="r7-3"><span class="n">7.3</span>The fix: a fixed 256-byte layout</h3>
+<aside class="mn"><b>PKCS #1</b>The RSA standard (RFC 8017). Version 1.5 defines the signature layout below.<b>RS256</b>In a JWT header: RSA with the PKCS #1 v1.5 layout and SHA-256 (RFC 7518).</aside>
+<p>Real RSA doesn't sign the bare hash. It signs a block exactly as long as <i>n</i>, 256 bytes for a 2,048-bit key, laid out as the standard <strong>PKCS #1 v1.5</strong> says. "RS256" in a token's header means exactly this: RSA, this layout, SHA-256.</p>
+<div class="scroll"><table class="tbl wide layout">
+  <thead><tr><th>Bytes</th><th>Value</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><span class="bseg b-hd">00</span></td><td>Keeps the block smaller than <i>n</i></td></tr>
+    <tr><td>1</td><td><span class="bseg b-hd">01</span></td><td>Block type 1: a signature</td></tr>
+    <tr><td>202</td><td><span class="bseg b-ff">FF FF … FF</span></td><td>Filler, so the block is full size</td></tr>
+    <tr><td>1</td><td><span class="bseg b-hd">00</span></td><td>End of the filler</td></tr>
+    <tr><td>19</td><td><span class="bseg b-di">30 31 30 0d 06 09 60 86 48 01 65 03 04 02 01 05 00 04 20</span></td><td><strong>DigestInfo</strong>: "a 32-byte SHA-256 hash follows", in the binary format ASN.1 DER</td></tr>
+    <tr><td>32</td><td><span class="bseg b-h">the hash</span></td><td>SHA-256 of the message</td></tr>
+  </tbody>
+</table></div>
+<p>Signing computes <i>s</i> = block<sup><i>d</i></sup> mod <i>n</i>. Verifying builds the expected block from the message, computes <i>s</i><sup><i>e</i></sup> mod <i>n</i>, and compares all 256 bytes. The product of two valid signatures opens to a random-looking 256-byte number, and so does a randomly chosen <i>s</i>. Hitting 256 exact bytes by luck is as hopeless as guessing the signature outright (§6.1).</p>
+<details class="deep"><summary><span class="t">Going deeper</span>Why the whole block must be compared</summary><div class="in">
+<p>In 2006 Daniel Bleichenbacher showed that verifiers which read the block loosely, finding the hash and ignoring whatever bytes came after it, accepted forged signatures for keys with <i>e</i> = 3. A forger could build a number whose cube began with the right bytes and ended in garbage, without the private key. The lab app (§9) builds the full expected block and compares every byte, and maintained libraries do the same. It's one more reason not to write this code yourself.</p>
+</div></details>
+<details class="deep"><summary><span class="t">Going deeper</span>PS256 and ES256</summary><div class="in">
+<p>RS256 is not the only choice. <strong>PS256</strong> uses RSA with a randomized layout (RSA-PSS) that comes with a security proof. <strong>ES256</strong> uses elliptic curves, with 256-bit keys and 64-byte signatures. Entra signs ID tokens with RS256, and the keys it publishes are RSA keys.</p>
+</div></details>
+
+<div class="check" data-quiz>
+  <p class="k">Check yourself</p>
+  <div class="q" data-answer="1">
+    <p class="qt">A forger multiplies two valid RS256 signatures from Entra. Will the product pass your app's check?</p>
+    <div class="opts"><button type="button">Yes, because signatures multiply</button><button type="button">No: it opens to a random-looking block, not <code>00 01 FF …</code> with the right hash</button></div>
+    <p class="fb" hidden data-fb="Right. The product is a valid textbook signature of a number that isn't a valid block." data-fb-wrong="It is a valid textbook signature, but of the product of two blocks, which is a random-looking number. Your app rebuilds the expected block from the message and compares all 256 bytes."></p>
+  </div>
+</div>
+</section>
+
+<!-- ================================================================ §8 -->
+<section class="chap" id="r8" data-toc="A real 2048-bit signature">
+<h2 class="sec"><span class="n">8</span>A real signature, opened by hand</h2>
+<p class="why"><b>Why you need this</b>To see that nothing changes at full size: the same formulas and the layout from §7, with 617-digit numbers.</p>
+<p>Figure 8.1 makes a real RS256 key pair with your browser's built-in cryptography and lets the browser sign. It then repeats each step by hand with JavaScript's big integers (<code>BigInt</code>), so you can compare the two.</p>
+
+<figure id="fig-real">
+  <div class="w">
+    <p class="wt"><span>Figure 8.1 · RSA-2048, by the browser and by hand</span><span class="live">Interactive</span></p>
+    <p class="stp">1 · Make a key pair</p>
+    <div class="row"><button type="button" class="btn pri" id="rk-gen">Make a 2048-bit key pair</button><span class="small" id="rk-info">No key yet.</span></div>
+    <div id="rk-key" hidden>
+      <label class="f"><span class="c-pub">n</span>, the modulus <span id="rk-nd"></span></label><div class="num pub" id="rk-n"></div>
+      <label class="f"><span class="c-pub">e</span>, the public exponent</label><div class="num pub" id="rk-e"></div>
+      <div class="two tight">
+        <div><label class="f"><span class="c-priv">p</span> <span id="rk-pd"></span></label><div class="num priv" id="rk-p"></div></div>
+        <div><label class="f"><span class="c-priv">q</span> <span id="rk-qd"></span></label><div class="num priv" id="rk-q"></div></div>
+      </div>
+      <label class="f"><span class="c-priv">d</span>, the private exponent <span id="rk-dd"></span></label><div class="num priv" id="rk-d"></div>
+      <div id="rk-checks" class="checks"></div>
+    </div>
+    <p class="stp">2 · The browser signs</p>
+    <label class="f" for="rk-msg">Message</label>
+    <textarea id="rk-msg" rows="2" spellcheck="false">{"name":"Alice Example","roles":["Admin"]}</textarea>
+    <div class="row" style="margin-top:8px"><button type="button" class="btn" id="rk-sign" disabled>Sign with crypto.subtle.sign</button></div>
+    <div class="num" id="rk-sig" hidden></div>
+    <p class="stp">3 · Open the signature by hand: <i>s</i><sup>e</sup> mod <i>n</i></p>
+    <div class="row"><button type="button" class="btn" id="rk-open" disabled>Open with the public key</button><span class="small" id="rk-otime"></span></div>
+    <div id="rk-block"></div>
+    <p class="stp">4 · Sign by hand: block<sup>d</sup> mod <i>n</i></p>
+    <div class="row"><button type="button" class="btn" id="rk-hand" disabled>Sign by hand with <i>d</i></button><span class="small" id="rk-htime"></span></div>
+    <div id="rk-hand-out" aria-live="polite"></div>
+  </div>
+  <figcaption><b>Figure 8.1.</b> The key is made with <code>crypto.subtle.generateKey</code> and exported so its numbers can be shown; it never leaves this page. After signing, change the message and open again: the block stays the same, and its hash no longer matches. For the default message the block is identical to the one in the lab (§11, task 5) on any computer, because it depends only on the message.</figcaption>
+</figure>
+
+<p>The timings show why <i>e</i> = 65537: opening takes 17 multiplications and is quick, while signing by hand with <i>d</i> takes about 3,000. Real libraries sign about four times faster by working mod <i>p</i> and mod <i>q</i> separately and combining the two results with the Chinese remainder theorem (§3.2). That's why a key file stores <i>p</i>, <i>q</i> and three more numbers: <i>d</i> mod (<i>p</i> − 1), <i>d</i> mod (<i>q</i> − 1), and the inverse of <i>q</i> mod <i>p</i>. You'll see them in the lab as <code>exponent1</code>, <code>exponent2</code> and <code>coefficient</code>.</p>
+</section>
+
+<!-- ================================================================ §9 -->
+<section class="chap" id="r9" data-toc="Checking an ID token">
+<h2 class="sec"><span class="n">9</span>Back to the token</h2>
+<p class="why"><b>Why you need this</b>This is the check your app's library runs on every ID token, and the SSO lab's app runs it in a few lines you can now read.</p>
+<p>An Entra key in the key set (<a href="../#s3-4">the chapter's §3.4</a>) carries <i>n</i> and <i>e</i> in base64url. <code>"e": "AQAB"</code> is the three bytes <code>01 00 01</code>, which is 65537. <code>"n"</code> decodes to 256 bytes: the 2,048-bit modulus. The token's third part decodes to 256 bytes too: the signature <i>s</i>. What's hashed is the token's first two parts exactly as they appear, as text: header, dot, payload. It is not the decoded JSON.</p>
+<p>The SSO lab's app checks a signature like this (from <code>app/app.py</code>):</p>
+<pre class="code">SHA256_DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")
+
+def rs256_verify(data: bytes, signature: bytes, n: int, e: int) -> bool:
+    k = (n.bit_length() + 7) // 8
+    s = int.from_bytes(signature, "big")
+    if len(signature) != k or s >= n:
+        return False
+    t = SHA256_DIGEST_INFO + hashlib.sha256(data).digest()
+    expected = b"\x00\x01" + b"\xff" * (k - len(t) - 3) + b"\x00" + t
+    return hmac.compare_digest(pow(s, e, n).to_bytes(k, "big"), expected)</pre>
+<p>Line by line: <code>k</code> is the key's size in bytes, 256. The signature must be exactly that long and smaller than <i>n</i>. <code>t</code> is the DigestInfo followed by the SHA-256 hash, and <code>expected</code> is the full 256-byte block from §7.3. The last line opens the signature with <code>pow(s, e, n)</code> and compares all 256 bytes. <code>hmac.compare_digest</code> takes the same time wherever the first difference is, so the time taken reveals nothing about how close a forgery came.</p>
+
+<figure id="fig-token">
+  <div class="w">
+    <p class="wt"><span>Figure 9.1 · The SSO lab's ID token, checked by hand</span><span class="live">Interactive</span></p>
+    <p class="jwt" id="tk-token"></p>
+    <div class="row" style="margin-top:10px"><button type="button" class="btn" id="tk-tamper">Change Admin to admin in the payload</button><button type="button" class="btn" id="tk-restore">Restore the token</button></div>
+    <dl class="kv" id="tk-out"></dl>
+    <div id="tk-block"></div>
+  </div>
+  <figcaption><b>Figure 9.1.</b> A token signed by Mini Entra during the chapter's lab, with the public key from its key set. Red: <span style="color:var(--bad)">header</span>; indigo: <span style="color:var(--idp)">payload</span>; teal: <span style="color:var(--app)">signature</span>.</figcaption>
+</figure>
+<p>Entra's keys have the same shape. All nine keys in Entra's public key set on 14 October 2026 were 2,048-bit, with <i>e</i> = 65537.</p>
+
+<div class="check" data-quiz>
+  <p class="k">Check yourself</p>
+  <div class="q" data-answer="1">
+    <p class="qt">Which bytes does a JWT's signature cover?</p>
+    <div class="opts"><button type="button">The decoded JSON of the payload</button><button type="button">The text header.payload, exactly as it appears in the token</button><button type="button">The whole token, signature included</button></div>
+    <p class="fb" hidden data-fb="Right. That's why re-encoding the same JSON with different spacing breaks the signature." data-fb-wrong="The signature covers the first two parts as text, base64url and dot included. A signature can't cover itself."></p>
+  </div>
+</div>
+</section>
+
+<!-- ================================================================ §10 -->
+<section class="chap" id="r10" data-toc="What this means for your apps">
+<h2 class="sec"><span class="n">10</span>What this means for your apps</h2>
+<p class="why"><b>Why you need this</b>You will never call <code>pow(s, e, n)</code> in production code. These points decide what you configure, and what you look for in a code review.</p>
+<ul>
+  <li><strong>Use a maintained library</strong>, such as MSAL, Authlib, or PyJWT with the <code>cryptography</code> package. It compares the whole block in constant time and handles key rotation. The SSO lab's code is for learning.</li>
+  <li><strong>Accept only the algorithm you expect.</strong> Pin RS256 for Entra's ID tokens, and reject a token whose header names any other algorithm (<a href="../#s7">the chapter's §7</a>).</li>
+  <li><strong>Public keys aren't secrets; private keys are.</strong> If your app ever signs something itself, such as a certificate credential for Entra (<a href="../#s8-4">the chapter's §8.4</a>), the private key belongs in a secret store, never in the image or in Git.</li>
+  <li><strong>2,048 bits is the minimum size in use today.</strong> 1,024-bit keys were retired in 2013.</li>
+  <li><strong>A signature proves who wrote a token and that nobody changed it.</strong> It hides nothing: anyone holding the token can read the payload.</li>
+</ul>
+</section>
+
+<!-- ================================================================ §11 lab -->
+<div class="part" id="partlab">
+  <p class="eyebrow">Lab</p>
+  <h2>RSA on your Mac</h2>
+  <p>About 15 minutes. You need Python 3.9 or later and OpenSSL 3. On a Mac, the <code>openssl</code> that comes with macOS is LibreSSL; see task 1.</p>
+</div>
+
+<section class="chap" id="r11" data-toc="Lab: RSA on your Mac">
+<h2 class="sec"><span class="n">11</span>Lab: a real key, opened by hand</h2>
+<p class="why"><b>Why you need this</b>Looking at a real key's numbers, and opening a real signature with a few lines of Python, makes the arithmetic stick. It also shows the same key fields you'll meet in certificates and secret stores.</p>
+
+<h4>Task 1 · Check OpenSSL and make a folder</h4>
+<div class="cmd"><pre>openssl version</pre></div>
+<pre class="out">OpenSSL 3.6.3 9 Jun 2026 (Library: OpenSSL 3.6.3 9 Jun 2026)</pre>
+<details class="deep"><summary><span class="t">If it differs</span>It prints LibreSSL</summary><div class="in">
+<p>That's macOS's own copy in <code>/usr/bin/openssl</code>. The output above is from the test Mac, which has OpenSSL 3.6.3. Key generation and opening the signature (tasks 2 and 5) also worked with LibreSSL 3.3.6 when this page was checked. The outputs on this page come from OpenSSL 3.6.3.</p>
+</div></details>
+<div class="cmd"><pre>mkdir -p ~/rsa-lab &amp;&amp; cd ~/rsa-lab</pre></div>
+
+<h4>Task 2 · Make a key and list its parts</h4>
+<div class="cmd"><pre>openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out key.pem</pre></div>
+<p>It prints two long rows of <code>.</code> and <code>+</code> while it searches for the two primes (§4.2), one row per prime. Now list the parts of the key, without their values:</p>
+<div class="cmd"><pre>openssl pkey -in key.pem -text -noout | grep -v '^ '</pre></div>
+<pre class="out">Private-Key: (2048 bit, 2 primes)
+modulus:
+publicExponent: 65537 (0x10001)
+privateExponent:
+prime1:
+prime2:
+exponent1:
+exponent2:
+coefficient:</pre>
+<div class="scroll"><table class="tbl">
+  <thead><tr><th>Field in the file</th><th>On this page</th></tr></thead>
+  <tbody>
+    <tr><td><code>modulus</code></td><td><b class="c-pub">n</b> = <i>p</i> × <i>q</i></td></tr>
+    <tr><td><code>publicExponent</code></td><td><b class="c-pub">e</b> = 65537</td></tr>
+    <tr><td><code>privateExponent</code></td><td><b class="c-priv">d</b></td></tr>
+    <tr><td><code>prime1</code>, <code>prime2</code></td><td><b class="c-priv">p</b> and <b class="c-priv">q</b></td></tr>
+    <tr><td><code>exponent1</code>, <code>exponent2</code>, <code>coefficient</code></td><td><i>d</i> mod (<i>p</i> − 1), <i>d</i> mod (<i>q</i> − 1), <i>q</i><sup>−1</sup> mod <i>p</i>: for faster signing (§8)</td></tr>
+  </tbody>
+</table></div>
+
+<h4>Task 3 · Check the recipe on your key</h4>
+<p>Write the key's numbers to a text file, then a short script that reads them and repeats the recipe's checks from §4. <code>key.txt</code> holds your private key in plain text; that's fine for a throwaway key, and task 8 deletes it.</p>
+<div class="cmd"><pre>openssl pkey -in key.pem -text -noout &gt; key.txt</pre></div>
+<div class="cmd"><pre>cat &gt; check_key.py &lt;&lt;'EOF'
+import math, re
+
+# key.txt lists each number as hex bytes after a label such as "modulus:"
+parts = re.split(r"^(\w+):.*$", open("key.txt").read(), flags=re.M)
+num = {parts[i]: int(re.sub(r"[\s:]", "", parts[i + 1]), 16)
+       for i in range(1, len(parts) - 1, 2) if parts[i] != "publicExponent"}
+
+n, d = num["modulus"], num["privateExponent"]
+p, q = num["prime1"], num["prime2"]
+e = 65537
+L = math.lcm(p - 1, q - 1)
+
+print("n:", n.bit_length(), "bits,", len(str(n)), "digits")
+print("p:", p.bit_length(), "bits   q:", q.bit_length(), "bits")
+print("p * q == n:", p * q == n)
+print("d == pow(e, -1, L):", d == pow(e, -1, L))
+EOF</pre></div>
+<div class="cmd"><pre>python3 check_key.py</pre></div>
+<pre class="out">n: 2048 bits, 617 digits
+p: 1024 bits   q: 1024 bits
+p * q == n: True
+d == pow(e, -1, L): True</pre>
+<p>Your key is new, but these four lines are the same for every 2048-bit key OpenSSL makes. The last line shows that OpenSSL computed <i>d</i> exactly as in §4, with <i>L</i> (see "φ(<i>n</i>)" in §3.2).</p>
+
+<h4>Task 4 · Sign and verify</h4>
+<div class="cmd"><pre>printf '{"name":"Alice Example","roles":["Admin"]}' &gt; msg.json
+openssl dgst -sha256 -sign key.pem -out sig.bin msg.json
+wc -c &lt; sig.bin</pre></div>
+<pre class="out">     256</pre>
+<p>The signature is 256 bytes: one number below <i>n</i>. Now extract the public key, which holds only <i>n</i> and <i>e</i>, and verify with it:</p>
+<div class="cmd"><pre>openssl pkey -in key.pem -pubout -out pub.pem
+openssl dgst -sha256 -verify pub.pem -signature sig.bin msg.json</pre></div>
+<pre class="out">Verified OK</pre>
+
+<h4>Task 5 · Open the signature and look inside</h4>
+<p><code>-pkeyopt rsa_padding_mode:none</code> tells OpenSSL to compute <i>s</i><sup><i>e</i></sup> mod <i>n</i> and stop, without checking the layout. Save the result and look at its first two and last four lines of bytes:</p>
+<div class="cmd"><pre>openssl pkeyutl -verifyrecover -pubin -inkey pub.pem -in sig.bin -pkeyopt rsa_padding_mode:none -out block.bin
+xxd block.bin | head -2
+xxd block.bin | tail -4</pre></div>
+<pre class="out">00000000: 0001 ffff ffff ffff ffff ffff ffff ffff  ................
+00000010: ffff ffff ffff ffff ffff ffff ffff ffff  ................
+000000c0: ffff ffff ffff ffff ffff ffff 0030 3130  .............010
+000000d0: 0d06 0960 8648 0165 0304 0201 0500 0420  ...`.H.e.......
+000000e0: 9e3b 67e7 d5c0 6589 3dd5 9011 0c67 52b7  .;g...e.=....gR.
+000000f0: 9888 b860 0a7b 615a 4ef8 216d 70fe ec39  ...`.{aZN.!mp..9</pre>
+<p>Every part of §7.3 is there: <span class="bseg b-hd">00 01</span>, the <span class="bseg b-ff">ff</span> filler, <span class="bseg b-hd">00</span> at byte 0xcc, the DigestInfo <span class="bseg b-di">30 31 30 0d … 04 20</span>, and the hash in the last 32 bytes. Compare those with the message's SHA-256:</p>
+<div class="cmd"><pre>openssl dgst -sha256 msg.json</pre></div>
+<pre class="out">SHA2-256(msg.json)= 9e3b67e7d5c065893dd590110c6752b79888b8600a7b615a4ef8216d70feec39</pre>
+<p>Your signature differs from anyone else's, because your key does. The block inside it is the same on every computer, because it depends only on the message.</p>
+
+<h4>Task 6 · Verify by hand, with only <i>n</i> and <i>e</i></h4>
+<div class="cmd"><pre>openssl rsa -pubin -in pub.pem -noout -modulus &gt; modulus.txt
+python3 - &lt;&lt;'EOF'
+import hashlib
+n = int(open("modulus.txt").read().split("=")[1], 16)
+e = 65537
+s = int.from_bytes(open("sig.bin", "rb").read(), "big")
+block = pow(s, e, n).to_bytes(256, "big")
+print("start of block:", block[:4].hex())
+print("end of block:  ", block[-32:].hex())
+print("SHA-256 of msg:", hashlib.sha256(open("msg.json", "rb").read()).hexdigest())
+EOF</pre></div>
+<pre class="out">start of block: 0001ffff
+end of block:   9e3b67e7d5c065893dd590110c6752b79888b8600a7b615a4ef8216d70feec39
+SHA-256 of msg: 9e3b67e7d5c065893dd590110c6752b79888b8600a7b615a4ef8216d70feec39</pre>
+<p>That's step 3 of §5.1, the whole of verification, in one line: <code>pow(s, e, n)</code>.</p>
+
+<h4>Task 7 · Change one letter</h4>
+<div class="cmd"><pre>printf '{"name":"Alice Example","roles":["admin"]}' &gt; msg.json
+openssl dgst -sha256 -verify pub.pem -signature sig.bin msg.json</pre></div>
+<pre class="out">801D59F701000000:error:02000068:rsa routines:ossl_rsa_verify:bad signature:crypto/rsa/rsa_sign.c:441:
+801D59F701000000:error:1C880004:Provider routines:rsa_verify_directly:RSA lib:providers/implementations/signature/rsa_sig.c:1057:
+Verification failure</pre>
+<p>The number at the start of each error line may differ on your Mac. The signature still opens to the same block, but its last 32 bytes no longer match the new message's hash.</p>
+
+<h4>Task 8 · Clean up</h4>
+<div class="cmd"><pre>cd ~ &amp;&amp; rm -r ~/rsa-lab</pre></div>
+<p>The key was a throwaway, and nothing else on your Mac changed.</p>
+</section>
+
+<!-- ================================================================ back matter -->
+<div class="part" id="partend">
+  <p class="eyebrow">End of page</p>
+  <h2>Summary, review and reference</h2>
+</div>
+
+<section class="chap" id="r12" data-toc="Summary">
+<h2 class="sec"><span class="n">12</span>Summary</h2>
+<ol class="summary">
+  <li><i>a</i> mod <i>n</i> is the remainder after dividing by <i>n</i>; <code>pow(m, e, n)</code> computes <i>m</i><sup><i>e</i></sup> mod <i>n</i> without ever making a huge number.</li>
+  <li>Powers mod <i>n</i> go round in cycles. For <i>n</i> = <i>p</i> × <i>q</i>, every cycle length divides <i>L</i> = lcm(<i>p</i> − 1, <i>q</i> − 1), so <i>m</i><sup>1 + <i>k</i>·<i>L</i></sup> mod <i>n</i> = <i>m</i>.</li>
+  <li>A key pair is two exponents with <i>e</i> × <i>d</i> mod <i>L</i> = 1: raising to <i>e</i> and then to <i>d</i>, in either order, gives back the number you started with.</li>
+  <li>The public key is (<i>n</i>, <i>e</i>); the private key is <i>d</i>, kept with <i>p</i> and <i>q</i>. In practice <i>e</i> = 65537 and <i>n</i> has 2,048 bits.</li>
+  <li>Computing <i>d</i> needs <i>L</i>, <i>L</i> needs <i>p</i> and <i>q</i>, and finding them means factoring <i>n</i>. For 2,048 bits nobody can.</li>
+  <li>Signing is <i>s</i> = block<sup><i>d</i></sup> mod <i>n</i>; verifying is <i>s</i><sup><i>e</i></sup> mod <i>n</i>, compared with the block rebuilt from the message.</li>
+  <li>Textbook RSA, signing the bare hash, lets signatures be multiplied into new ones. Real RSA signs a fixed layout: <code>00 01 FF…FF 00</code>, DigestInfo, hash.</li>
+  <li>RS256 in a JWT is exactly that layout with SHA-256, over the text header.payload. Entra's keys are 2,048-bit with <i>e</i> = 65537.</li>
+  <li>In your apps, a maintained library does all of this. Your job is to pin the algorithm, let the library fetch keys, and keep any private key of your own in a secret store.</li>
+</ol>
+</section>
+
+<section class="chap" id="r13" data-toc="Review questions">
+<h2 class="sec"><span class="n">13</span>Review questions</h2>
+<p class="small" id="rv-score">Answered 0 of 8.</p>
+<div data-quiz data-review>
+  <div class="q" data-answer="2">
+    <p class="qt">1. What is 50 mod 33?</p>
+    <div class="opts"><button type="button">1</button><button type="button">33</button><button type="button">17</button></div>
+    <p class="fb" hidden data-fb="Right. 50 = 1 × 33 + 17." data-fb-wrong="50 = 1 × 33 + 17, so the remainder is 17."></p>
+  </div>
+  <div class="q" data-answer="0">
+    <p class="qt">2. <i>p</i> = 3 and <i>q</i> = 11. Which pair of exponents is a working key pair?</p>
+    <div class="opts"><button type="button"><i>e</i> = 3, <i>d</i> = 7</button><button type="button"><i>e</i> = 3, <i>d</i> = 5</button><button type="button"><i>e</i> = 5, <i>d</i> = 5</button></div>
+    <p class="fb" hidden data-fb="Right. L = 10 and 3 × 7 = 21, which is 1 mod 10." data-fb-wrong="L = lcm(2, 10) = 10, and e × d mod 10 must be 1: 3 × 7 = 21 works; 15 and 25 give 5."></p>
+  </div>
+  <div class="q" data-answer="1">
+    <p class="qt">3. Which numbers must stay secret?</p>
+    <div class="opts"><button type="button"><i>n</i> and <i>d</i></button><button type="button"><i>d</i>, <i>p</i>, <i>q</i> and <i>L</i></button><button type="button"><i>e</i> and <i>d</i></button></div>
+    <p class="fb" hidden data-fb="Right. Any one of p, q or L leads straight to d." data-fb-wrong="n and e are the public key. d is secret, and so are p, q and L, because each of them leads straight to d."></p>
+  </div>
+  <div class="q" data-answer="1">
+    <p class="qt">4. Why does every real key use <i>e</i> = 65537?</p>
+    <div class="opts"><button type="button">It makes the private key harder to find</button><button type="button">It is prime and has only two 1 bits, so verifying takes just 17 multiplications</button><button type="button">The standard forbids every other value</button></div>
+    <p class="fb" hidden data-fb="Right. Being prime also makes it very likely to share no factor with L." data-fb-wrong="Security comes from n; e is public anyway. 65537 is chosen because verifying with it is fast, and because it's prime it rarely shares a factor with L."></p>
+  </div>
+  <div class="q" data-answer="0">
+    <p class="qt">5. What does an attacker need to compute <i>d</i> from the public key?</p>
+    <div class="opts"><button type="button">The factors <i>p</i> and <i>q</i> of <i>n</i></button><button type="button">A copy of the signature</button><button type="button">The SHA-256 of the message</button></div>
+    <p class="fb" hidden data-fb="Right. With p and q, the recipe in §4 gives d at once." data-fb-wrong="Signatures and hashes are public. The missing piece is p and q: with them, L and then d follow at once (§4)."></p>
+  </div>
+  <div class="q" data-answer="2">
+    <p class="qt">6. Textbook RSA signatures for 6 and 7 are known. What can a forger make without <i>d</i>?</p>
+    <div class="opts"><button type="button">Nothing</button><button type="button">The private key</button><button type="button">A valid textbook signature for 42</button></div>
+    <p class="fb" hidden data-fb="Right. Signatures multiply: s(6) × s(7) mod n = s(42)." data-fb-wrong="Signatures multiply: s(6) × s(7) mod n is a valid signature for 42 (§7.1). That's why real RSA signs a padded block."></p>
+  </div>
+  <div class="q" data-answer="1">
+    <p class="qt">7. You open an RS256 signature with <i>s</i><sup><i>e</i></sup> mod <i>n</i>. Where in the 256 bytes is the hash?</p>
+    <div class="opts"><button type="button">The first 32 bytes</button><button type="button">The last 32 bytes, after the 19-byte DigestInfo</button><button type="button">Nowhere: it is encrypted</button></div>
+    <p class="fb" hidden data-fb="Right. 00 01, 202 bytes of FF, 00, DigestInfo, hash." data-fb-wrong="The block starts 00 01 FF… and ends with the DigestInfo and then the 32-byte hash (§7.3). You saw it in task 5 of the lab."></p>
+  </div>
+  <div class="q" data-answer="0">
+    <p class="qt">8. Entra rotates its signing keys. What changes in the formulas your app's library uses?</p>
+    <div class="opts"><button type="button">Nothing: it fetches the new <i>n</i> and <i>e</i> from the key set and computes <i>s</i><sup><i>e</i></sup> mod <i>n</i> as before</button><button type="button">It needs the new <i>d</i></button><button type="button">It has to switch to a different hash</button></div>
+    <p class="fb" hidden data-fb="Right. A new key is just a new n (e stays 65537), found by its kid." data-fb-wrong="Your app never has d. A new key is just a new n, with e still 65537, which the library finds in the key set by its kid."></p>
+  </div>
+</div>
+</section>
+
+<section class="chap gloss" id="r14" data-toc="Glossary">
+<h2 class="sec"><span class="n">14</span>Glossary</h2>
+<dl>
+  <dt>Carmichael function λ(<i>n</i>), <i>L</i></dt><dd>The smallest number that every cycle length mod <i>n</i> divides. For <i>n</i> = <i>p</i> × <i>q</i> it is lcm(<i>p</i> − 1, <i>q</i> − 1). <a href="#r3-2">§3.2</a></dd>
+  <dt>Cycle length</dt><dd>How many multiplications by <i>m</i> bring <i>m</i><sup><i>k</i></sup> mod <i>n</i> back to <i>m</i>. <a href="#r1-3">§1.3</a></dd>
+  <dt>DigestInfo</dt><dd>19 bytes in the signed block that say "a SHA-256 hash follows". <a href="#r7-3">§7.3</a></dd>
+  <dt>Euler's totient φ(<i>n</i>)</dt><dd>(<i>p</i> − 1)(<i>q</i> − 1): a multiple of <i>L</i> that many textbooks use instead. <a href="#r3-2">§3.2</a></dd>
+  <dt>Extended Euclidean algorithm</dt><dd>The method that finds <i>d</i> from <i>e</i> and <i>L</i>. <a href="#r4-1">§4.1</a></dd>
+  <dt>Factoring</dt><dd>Splitting <i>n</i> back into <i>p</i> and <i>q</i>. Infeasible for 2,048 bits. <a href="#r6-2">§6.2</a></dd>
+  <dt>lcm</dt><dd>Least common multiple: the smallest number that both numbers divide. <a href="#r3-2">§3.2</a></dd>
+  <dt>Miller–Rabin test</dt><dd>A fast test of whether a number is prime, used to find <i>p</i> and <i>q</i>. <a href="#r4-2">§4.2</a></dd>
+  <dt>mod, modulus</dt><dd><i>a</i> mod <i>n</i> is the remainder after dividing by <i>n</i>, the modulus. <a href="#r1-1">§1.1</a></dd>
+  <dt>Modular inverse</dt><dd>The number <i>d</i> with <i>e</i> × <i>d</i> mod <i>L</i> = 1. <a href="#r4-1">§4.1</a></dd>
+  <dt>Number field sieve</dt><dd>The fastest known way to factor large numbers on ordinary computers. <a href="#r6-2">§6.2</a></dd>
+  <dt>PKCS #1 v1.5</dt><dd>The standard layout RSA signs: <code>00 01 FF…FF 00</code>, DigestInfo, hash. <a href="#r7-3">§7.3</a></dd>
+  <dt>Prime</dt><dd>A whole number above 1 that only 1 and itself divide. <a href="#r3-1">§3.1</a></dd>
+  <dt>Private exponent <i>d</i></dt><dd>The secret power that signs. <a href="#r2-1">§2.1</a></dd>
+  <dt>Public exponent <i>e</i></dt><dd>The public power that verifies; almost always 65537. <a href="#r2-1">§2.1</a></dd>
+  <dt>RS256</dt><dd>The JWT algorithm name for RSA with the PKCS #1 v1.5 layout and SHA-256. <a href="#r7-3">§7.3</a></dd>
+  <dt>Square and multiply</dt><dd>Computing a power with about two multiplications per bit of the exponent. <a href="#r1-2">§1.2</a></dd>
+  <dt>Textbook RSA</dt><dd>Signing the bare value with <i>h</i><sup><i>d</i></sup> mod <i>n</i>; forgeable, so never used as is. <a href="#r7">§7</a></dd>
+  <dt>Trial division</dt><dd>Factoring by dividing by 3, 5, 7 and so on. <a href="#r6-2">§6.2</a></dd>
+</dl>
+</section>
+
+<section class="chap" id="r15" data-toc="How this page was checked">
+<h2 class="sec"><span class="n">15</span>How this page was checked</h2>
+<ul>
+  <li><strong>Run on the test Mac</strong>, the same Mac as the chapter's lab, on 26 October 2026, with Python 3.13.13 and OpenSSL 3.6.3: every Python command in §1–§7 (outputs compared automatically with the page), and the whole lab in §11, from a fresh folder. Tasks 2 and 5 were also run with macOS's LibreSSL 3.3.6.</li>
+  <li><strong>In the browser:</strong> the figures were checked against the same numbers, and Figure 8.1's hand-made signature was compared byte by byte with the one <code>crypto.subtle.sign</code> made.</li>
+  <li><strong>From the chapter's lab:</strong> the token and key set in Figure 9.1, and the key sizes of Entra's nine public keys on 14 October 2026.</li>
+  <li><strong>Read on 26 October 2026:</strong> the factoring records and the NIST draft below.</li>
+  <li>The page was written with Claude, Anthropic's AI model, in October 2026.</li>
+</ul>
+<h4>Sources</h4>
+<ul class="refs">
+  <li><a href="https://www.rfc-editor.org/rfc/rfc8017">RFC 8017</a>, PKCS #1: RSA Cryptography Specifications Version 2.2 (the signature layout, §9.2).</li>
+  <li><a href="https://www.rfc-editor.org/rfc/rfc7518#section-3.3">RFC 7518 §3.3</a>, what RS256 means in a JWT.</li>
+  <li><a href="https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf">FIPS 186-4</a>, Appendix B.3.1, and OpenSSL's <a href="https://github.com/openssl/openssl/blob/master/crypto/rsa/rsa_sp800_56b_check.c">key check for SP 800-56B</a>: <i>d</i> is computed with lcm(<i>p</i> − 1, <i>q</i> − 1).</li>
+  <li><a href="https://cognition.com/blog/factoring-rsa-260">Cognition: Factoring RSA-260</a> (September 2026), with the GPU-days and the RSA-1024 and RSA-2048 estimates.</li>
+  <li><a href="https://www.schneier.com/blog/archives/2020/04/rsa-250_factore.html">Schneier: RSA-250 factored</a> (2020), about 2,700 core-years; and <a href="https://en.wikipedia.org/wiki/RSA_Factoring_Challenge">the RSA Factoring Challenge</a> on Wikipedia.</li>
+  <li><a href="https://nvlpubs.nist.gov/nistpubs/ir/2024/NIST.IR.8547.ipd.pdf">NIST IR 8547</a> (initial public draft, November 2024), the transition to post-quantum cryptography.</li>
+  <li><a href="../">Single Sign-On with Entra ID</a>, the chapter this page belongs to.</li>
+</ul>
+</section>
+
+<footer class="colophon">
+<p>A companion page to <a href="../">Single Sign-On with Entra ID</a>. Text and figures: <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Code and configuration: MIT.
+Source, lab files and corrections: <a href="https://github.com/Espad0/sso-with-entra-id">github.com/Espad0/sso-with-entra-id</a>.</p>
+</footer>
+</main>
+</div>
+<script>
+"use strict";
+/* ---------------------------------------------------------------- helpers (as in the chapter) */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const hasCrypto = !!(window.crypto && crypto.subtle);
+// digits grouped with commas from 10,000 up, as in the text (3233, but 1,022,117)
+const fmt = (x) => { const b = BigInt(x); return b < 10000n && b > -10000n ? b.toString() : b.toLocaleString("en-US"); };
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+function b64url(bytes) {
+  let s = "";
+  new Uint8Array(bytes).forEach((b) => (s += String.fromCharCode(b)));
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlToBytes(t) {
+  t = t.replace(/-/g, "+").replace(/_/g, "/");
+  while (t.length % 4) t += "=";
+  return Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
+}
+const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, "0")).join("");
+async function sha256(bytes) { return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)); }
+
+/* ---------------------------------------------------------------- exact integer arithmetic */
+// m^e mod n with small Numbers (all products stay below 2^53 for n < 9e7)
+function powN(b, e, m) {
+  let r = 1 % m; b %= m;
+  while (e > 0) { if (e & 1) r = (r * b) % m; e = Math.floor(e / 2); if (e > 0) b = (b * b) % m; }
+  return r;
+}
+// the same with BigInt: square and multiply
+function modpow(b, e, m) {
+  if (m === 1n) return 0n;
+  let r = 1n; b = ((b % m) + m) % m;
+  while (e > 0n) { if (e & 1n) r = (r * b) % m; e >>= 1n; if (e > 0n) b = (b * b) % m; }
+  return r;
+}
+const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return a < 0n ? -a : a; };
+const lcm = (a, b) => (a / gcd(a, b)) * b;
+function inverse(e, L) {
+  // extended Euclid: keeps t with t·e ≡ r (mod L)
+  let [r0, r1] = [L, e % L], [t0, t1] = [0n, 1n];
+  while (r1) { const q = r0 / r1; [r0, r1] = [r1, r0 - q * r1]; [t0, t1] = [t1, t0 - q * t1]; }
+  return r0 === 1n ? ((t0 % L) + L) % L : null;
+}
+function euclidRows(L, e) {
+  const rows = []; let a = L, b = e;
+  while (b) { rows.push([a, a / b, b, a % b]); [a, b] = [b, a % b]; }
+  return { rows, g: a };
+}
+function isPrimeNum(x) {
+  if (x < 2) return false;
+  if (x % 2 === 0) return x === 2;
+  for (let i = 3; i * i <= x; i += 2) if (x % i === 0) return false;
+  return true;
+}
+const toBig = (u8) => { let x = 0n; for (const b of u8) x = (x << 8n) | BigInt(b); return x; };
+function toBytes(x, k) {
+  const out = new Uint8Array(k);
+  for (let i = k - 1; i >= 0; i--) { out[i] = Number(x & 255n); x >>= 8n; }
+  return out;
+}
+const sup = (x) => `<sup>${x}</sup>`;
+const kv = (rows) => rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+const verdict = (ok, html) => `<div class="verdict ${ok ? "ok" : "bad"}">${html}</div>`;
+
+/* ---------------------------------------------------------------- contents, progress */
+(function toc() {
+  const nav = $("#toc-nav");
+  if (!nav) return;
+  let html = '<p class="lbl">Contents</p><div class="progress" aria-hidden="true"><i id="prog"></i></div>';
+  $$("main .part, main section.chap[data-toc]").forEach((b) => {
+    if (b.classList.contains("part")) {
+      html += `<p class="part-l">${esc($(".eyebrow", b).textContent)} · ${esc($("h2", b).textContent)}</p>`;
+    } else {
+      const n = $("h2.sec .n", b);
+      html += `<a href="#${b.id}" data-sec="${b.id}"><span>${n ? esc(n.textContent) : ""}</span>${esc(b.dataset.toc)}</a>`;
+    }
+  });
+  nav.innerHTML = html;
+  const links = new Map($$("a[data-sec]", nav).map((a) => [a.dataset.sec, a]));
+  const secs = $$("main section.chap[data-toc]");
+  const onScroll = () => {
+    const y = window.scrollY + 140;
+    let cur = secs[0];
+    secs.forEach((s) => { if (s.offsetTop <= y) cur = s; });
+    links.forEach((a) => a.classList.remove("on"));
+    if (cur && links.get(cur.id)) links.get(cur.id).classList.add("on");
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const p = $("#prog");
+    if (p) p.style.width = (max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0) + "%";
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+})();
+
+/* ---------------------------------------------------------------- copy buttons */
+$$(".cmd").forEach((box) => {
+  const pre = $("pre", box);
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "copy"; b.textContent = "Copy";
+  b.addEventListener("click", () => {
+    const text = pre.innerText.replace(/\n$/, "");
+    const done = () => { b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400); };
+    const fallback = () => {
+      const r = document.createRange(); r.selectNodeContents(pre);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      b.textContent = "Selected: press ⌘C";
+      setTimeout(() => (b.textContent = "Copy"), 2200);
+    };
+    try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+  });
+  box.appendChild(b);
+});
+
+/* ---------------------------------------------------------------- quizzes */
+(function quizzes() {
+  const review = $("[data-review]");
+  const total = review ? $$(".q", review).length : 0;
+  const score = { answered: 0, right: 0 };
+  $$("[data-quiz] .q").forEach((q) => {
+    const answer = +q.dataset.answer;
+    const fb = $(".fb", q);
+    let first = true;
+    $$(".opts button", q).forEach((btn, i) => {
+      btn.addEventListener("click", () => {
+        const ok = i === answer;
+        btn.classList.add(ok ? "right" : "wrong");
+        fb.hidden = false;
+        const t = ok ? fb.dataset.fb : fb.dataset.fbWrong;
+        const m = t.match(/^(Right\.|Not quite\.)\s*/);
+        fb.innerHTML = m ? `<b>${esc(m[1])}</b> ${esc(t.slice(m[0].length))}` : `<b>${ok ? "Right." : "Not quite."}</b> ${esc(t)}`;
+        if (ok) $$(".opts button", q).forEach((o) => (o.disabled = o !== btn));
+        if (first && review && review.contains(q)) {
+          score.answered++; if (ok) score.right++;
+          $("#rv-score").textContent = `Answered ${score.answered} of ${total} · right first time: ${score.right}.`;
+        }
+        first = false;
+      });
+    });
+  });
+})();
+
+/* ---------------------------------------------------------------- Figure 1.1: powers around a circle */
+(function cycles() {
+  const svg = $("#cy-svg");
+  if (!svg) return;
+  const N = 33, cx = 200, cy = 200, R = 150, RL = 178;
+  const pos = (i, r) => { const a = (i / N) * 2 * Math.PI - Math.PI / 2; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  const cycle = (m) => { for (let k = 1; k <= N; k++) if (powN(m, k + 1, N) === m % N) return k; return null; };
+  const lens = Array.from({ length: N }, (_, m) => cycle(m));
+  let base = `<circle class="ring" cx="${cx}" cy="${cy}" r="${R}"/><g id="cy-chords"></g>`;
+  for (let i = 0; i < N; i++) {
+    const [x, y] = pos(i, R), [lx, ly] = pos(i, RL);
+    base += `<circle class="dot" data-i="${i}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5"/><text class="lbl" data-i="${i}" x="${lx.toFixed(1)}" y="${ly.toFixed(1)}">${i}</text>`;
+  }
+  svg.innerHTML = base;
+  const chords = $("#cy-chords", svg);
+  let m = 2, cur = 2, k = 1, done = false, timer = null;
+  const log = $("#cy-log");
+
+  function mark() {
+    $$(".dot", svg).forEach((d) => d.classList.remove("on", "start"));
+    $$(".lbl", svg).forEach((d) => d.classList.remove("on"));
+    $(`.dot[data-i="${m}"]`, svg).classList.add("start");
+    $(`.lbl[data-i="${m}"]`, svg).classList.add("on");
+    $(`.dot[data-i="${cur}"]`, svg).classList.add("on");
+  }
+  function reset() {
+    clearTimeout(timer); timer = null;
+    m = +$("#cy-m").value; cur = m; k = 1; done = false;
+    $("#cy-mv").textContent = m;
+    chords.innerHTML = "";
+    log.innerHTML = `<div>${m}${sup(1)} mod 33 = <b>${m}</b></div>`;
+    $("#cy-step").disabled = false; $("#cy-run").disabled = false;
+    mark();
+    $$(".cell", $("#cy-cells")).forEach((c) => c.classList.toggle("sel", +c.dataset.m === m));
+  }
+  function step() {
+    if (done) return;
+    const next = (cur * m) % N;
+    const [x1, y1] = pos(cur, R), [x2, y2] = pos(next, R);
+    $$(".chord", chords).forEach((c) => c.classList.remove("last"));
+    if (next !== cur) chords.insertAdjacentHTML("beforeend", `<line class="chord last" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`);
+    k++; cur = next;
+    let line = `<div>${m}${sup(k)} mod 33 = <b>${next}</b></div>`;
+    if (next === m) {
+      done = true;
+      line += `<div class="hit">Back at ${m} after ${k - 1} step${k - 1 === 1 ? "" : "s"}: cycle length ${k - 1}.</div>`;
+      $("#cy-step").disabled = true; $("#cy-run").disabled = true;
+    }
+    log.insertAdjacentHTML("beforeend", line);
+    log.scrollTop = log.scrollHeight;
+    mark();
+  }
+  function run() {
+    if (done) return;
+    if (reduceMotion) { while (!done) step(); return; }
+    step();
+    if (!done) timer = setTimeout(run, 220);
+  }
+  // the row of cells
+  const counts = {};
+  $("#cy-cells").innerHTML = lens.map((L, i) => {
+    counts[L] = (counts[L] || 0) + 1;
+    return `<button type="button" class="cell l${L}" data-m="${i}" aria-label="m = ${i}, cycle length ${L}"><b>${i}</b><span>${L}</span></button>`;
+  }).join("");
+  $$(".cell", $("#cy-cells")).forEach((c) => c.addEventListener("click", () => { $("#cy-m").value = c.dataset.m; reset(); }));
+  const parts = Object.keys(counts).sort((a, b) => a - b).map((L) => `length ${L}: ${counts[L]} numbers`);
+  $("#cy-note").textContent = `Top: m. Bottom: its cycle length. ${parts.join("; ")}. Every length divides 10.`;
+  $("#cy-m").addEventListener("input", reset);
+  $("#cy-step").addEventListener("click", () => { clearTimeout(timer); step(); });
+  $("#cy-run").addEventListener("click", () => { clearTimeout(timer); run(); });
+  $("#cy-reset").addEventListener("click", reset);
+  reset();
+})();
+
+/* ---------------------------------------------------------------- Figure 2.1: scramble and unscramble */
+(function lock() {
+  const box = $("#lk-pairs");
+  if (!box) return;
+  const N = 33, L = 10;
+  const pairs = [[3, 7], [7, 3], [9, 9], [13, 17], [3, 5], [7, 7]];
+  let pair = pairs[0];
+  box.innerHTML = pairs.map((p, i) => `<button type="button" data-i="${i}" aria-pressed="${i === 0}">e ${p[0]} · d ${p[1]}</button>`).join("");
+  function render() {
+    const [e, d] = pair, m = +$("#lk-m").value;
+    $("#lk-mv").textContent = m;
+    const c = powN(m, e, N), back = powN(c, d, N);
+    $("#lk-out").innerHTML = `<i class="c-msg">${m}</i> → ${m}<sup class="c-pub">${e}</sup> mod 33 = ${c} → ${c}<sup class="c-priv">${d}</sup> mod 33 = <b class="${back === m ? "c-msg" : ""}" style="${back === m ? "" : "color:var(--bad)"}">${back}</b> ${back === m ? "✓" : "✗"}`;
+    const ed = e * d, r = ed % L;
+    $("#lk-rule").innerHTML = r === 1
+      ? `<span class="badge ok">Key pair</span> e × d = ${ed}, and ${ed} mod 10 = 1.`
+      : `<span class="badge bad">Not a key pair</span> e × d = ${ed}, and ${ed} mod 10 = ${r}, not 1.`;
+    let ok = 0;
+    $("#lk-cells").innerHTML = Array.from({ length: N }, (_, x) => {
+      const b = powN(powN(x, e, N), d, N), good = b === x;
+      if (good) ok++;
+      return `<button type="button" class="cell ${good ? "ok" : "bad"}${x === m ? " sel" : ""}" data-m="${x}" aria-label="m = ${x} gives ${b}"><b>${x}</b><span>${good ? "✓" : "→ " + b}</span></button>`;
+    }).join("");
+    $$(".cell", $("#lk-cells")).forEach((cl) => cl.addEventListener("click", () => { $("#lk-m").value = cl.dataset.m; render(); }));
+    $("#lk-sum").innerHTML = ok === N ? `<span class="c-msg">All 33 numbers came back.</span>` : `<span style="color:var(--bad)">Only ${ok} of 33 numbers came back.</span>`;
+  }
+  $$("button", box).forEach((b) => b.addEventListener("click", () => {
+    $$("button", box).forEach((x) => x.setAttribute("aria-pressed", "false"));
+    b.setAttribute("aria-pressed", "true");
+    pair = pairs[+b.dataset.i];
+    render();
+  }));
+  $("#lk-m").addEventListener("input", render);
+  render();
+})();
+
+/* ---------------------------------------------------------------- Figure 4.1: key workshop */
+(function workshop() {
+  const pres = $("#kw-presets");
+  if (!pres) return;
+  const presets = [
+    ["3 and 11", 3, 11, 3], ["61 and 53", 61, 53, 17], ["1009 and 1013", 1009, 1013, 65537],
+    ["Mistake: e = 3", 61, 53, 3], ["Mistake: 21 isn't prime", 21, 11, 17], ["Mistake: same prime twice", 11, 11, 3],
+  ];
+  pres.innerHTML = presets.map((p, i) => `<button type="button" class="btn" data-i="${i}">${p[0]}</button>`).join("");
+  const LIMIT = 10000000;
+  let timer = null;
+  function parse(id) {
+    const t = $(id).value.trim().replace(/[,_\s]/g, "");
+    if (!/^\d+$/.test(t)) return null;
+    const v = Number(t);
+    return v >= 2 && v <= LIMIT ? v : null;
+  }
+  function compute() {
+    const pn = parse("#kw-p"), qn = parse("#kw-q"), e = BigInt($("#kw-e").value);
+    const out = $("#kw-out"), chk = $("#kw-check"), eu = $("#kw-euclid");
+    if (pn === null || qn === null) {
+      out.innerHTML = ""; eu.innerHTML = "";
+      chk.innerHTML = verdict(false, `<b>Enter whole numbers from 2 to ${LIMIT.toLocaleString("en-US")}</b> for p and q.`);
+      return;
+    }
+    const p = BigInt(pn), q = BigInt(qn), n = p * q, L = lcm(p - 1n, q - 1n), g = gcd(e, L), d = inverse(e, L);
+    const pPrime = isPrimeNum(pn), qPrime = isPrimeNum(qn);
+    out.innerHTML = kv([
+      [`<span class="c-pub">n</span> = p × q`, `${fmt(p)} × ${fmt(q)} = <b class="c-pub">${fmt(n)}</b>`],
+      [`<span class="c-priv">L</span> = lcm(p − 1, q − 1)`, `lcm(${fmt(p - 1n)}, ${fmt(q - 1n)}) = <b class="c-priv">${fmt(L)}</b>`],
+      [`common factor of e and L`, g === 1n ? `none (gcd = 1)` : `<b style="color:var(--bad)">${fmt(g)}</b>`],
+      [`<span class="c-priv">d</span> = e<sup>−1</sup> mod L`, d === null ? `<span style="color:var(--bad)">does not exist</span>` : `<b class="c-priv">${fmt(d)}</b>`],
+      [`check e × d mod L`, d === null ? "–" : `${fmt(e)} × ${fmt(d)} = ${fmt(e * d)} → ${fmt((e * d) % L)}`],
+    ]);
+    const { rows } = e > L ? euclidRows(e, L) : euclidRows(L, e);
+    eu.innerHTML = `<pre class="code">${rows.map(([a, qq, b, r]) => `${fmt(a)} = ${fmt(qq)} × ${fmt(b)} + ${fmt(r)}`).join("\n")}</pre>` +
+      `<p style="margin:8px 0 0">${g === 1n ? `The last non-zero remainder is 1, so e and L share no factor. Working back up the lines gives d = ${fmt(d)}.` : `The last non-zero remainder is ${fmt(g)}: e and L share the factor ${fmt(g)}, so no d exists.`}</p>`;
+    if (d === null) {
+      chk.innerHTML = verdict(false, `<b>No key pair.</b> ${fmt(e)} and L = ${fmt(L)} share the factor ${fmt(g)}, so ${fmt(e)} × d mod L can never be 1. Choose another e.`);
+      return;
+    }
+    // round trip: every m, or a sample including the hardest values
+    let ms;
+    const all = n <= 20000n;
+    if (all) ms = Array.from({ length: Number(n) }, (_, i) => BigInt(i));
+    else {
+      const set = new Set([0n, 1n, 2n, p, q, n - 1n, n - p, n - q]);
+      while (set.size < 3000) set.add(BigInt(Math.floor(Math.random() * Number(n))));
+      ms = [...set].filter((x) => x < n);
+    }
+    const bad = [];
+    for (const m of ms) {
+      const back = modpow(modpow(m, e, n), d, n);
+      if (back !== m) bad.push([m, back]);
+    }
+    const tested = all ? `all ${fmt(n)} numbers from 0 to ${fmt(n - 1n)}` : `${fmt(ms.length)} numbers from 0 to ${fmt(n - 1n)}`;
+    if (!bad.length && pPrime && qPrime && p !== q) {
+      chk.innerHTML = verdict(true, `<b>A working key pair.</b> Checked ${tested}: every one came back. Public key (n, e) = (${fmt(n)}, ${fmt(e)}); private key d = ${fmt(d)}.`);
+    } else if (!bad.length) {
+      chk.innerHTML = verdict(false, `<b>Works only by luck.</b> Checked ${tested}: every one came back, but ${!pPrime ? fmt(p) : !qPrime ? fmt(q) : fmt(p) + " is used twice and"} ${pPrime && qPrime ? "" : "is not a prime, so "}L = lcm(p − 1, q − 1) is not the real cycle length of n. Here the real one happens to divide e × d − 1. Try p = 21.`);
+    } else {
+      const why = !pPrime || !qPrime ? `${!pPrime ? fmt(p) : fmt(q)} is not a prime, so the cycle lengths don't all divide L.`
+        : p === q ? `p and q are the same prime, so n = p² and the cycles mod p² are longer than lcm(p − 1, q − 1).` : "";
+      const ex = bad.slice(0, 3).map(([m, b]) => `${fmt(m)} → ${fmt(b)}`).join(", ");
+      chk.innerHTML = verdict(false, `<b>Broken.</b> ${why} Checked ${tested}: ${fmt(bad.length)} did not come back${ex ? ` (for example ${ex})` : ""}.`);
+    }
+  }
+  const later = () => { clearTimeout(timer); timer = setTimeout(compute, 250); };
+  $("#kw-p").addEventListener("input", later);
+  $("#kw-q").addEventListener("input", later);
+  $("#kw-e").addEventListener("change", compute);
+  $$("button", pres).forEach((b) => b.addEventListener("click", () => {
+    const [, p, q, e] = presets[+b.dataset.i];
+    $("#kw-p").value = p; $("#kw-q").value = q; $("#kw-e").value = String(e);
+    compute();
+  }));
+  compute();
+})();
+
+/* ---------------------------------------------------------------- Figure 5.1: toy signatures */
+const TOY = { n: 3233n, e: 17n, d: 413n, msg: "", h: null, s: null, listeners: [] };
+async function toyHash(text) { return toBig(await sha256(enc.encode(text))); }
+(function toySign() {
+  if (!$("#ts-sign")) return;
+  if (!hasCrypto) { $("#ts-out").innerHTML = kv([["Note", "This browser has no Web Crypto, so the figures can't compute SHA-256."]]); return; }
+  async function sign() {
+    const msg = $("#ts-msg").value;
+    const H = await toyHash(msg), h = H % TOY.n, s = modpow(h, TOY.d, TOY.n);
+    Object.assign(TOY, { msg, h, s });
+    $("#ts-out").innerHTML = kv([
+      ["SHA-256", `<span class="c-msg">${H.toString(16).padStart(64, "0").slice(0, 16)}…</span>`],
+      ["h = SHA-256 mod 3233", `<b class="c-msg">${h}</b>`],
+      [`s = h${sup("413")} mod 3233`, `<b>${s}</b>`],
+    ]);
+    $("#tv-msg").value = msg;
+    $("#tv-sig").value = String(s);
+    await verify();
+    TOY.listeners.forEach((f) => f());
+  }
+  async function verify() {
+    const msg = $("#tv-msg").value, t = $("#tv-sig").value.trim();
+    if (!/^\d+$/.test(t)) { $("#tv-out").innerHTML = kv([["Signature", "Enter a whole number."]]); return; }
+    const s = BigInt(t) % TOY.n, h = (await toyHash(msg)) % TOY.n, opened = modpow(s, TOY.e, TOY.n);
+    const ok = opened === h;
+    $("#tv-out").innerHTML = kv([
+      ["hash of message mod 3233", `<b class="c-msg">${h}</b>`],
+      [`s${sup("17")} mod 3233`, `<b>${opened}</b>`],
+    ]) + verdict(ok, ok ? "<b>Valid.</b> The opened signature equals the hash: Alice signed exactly this message." : `<b>Invalid.</b> The signature opens to ${opened}, but the message hashes to ${h}.`);
+  }
+  $("#ts-sign").addEventListener("click", sign);
+  $("#tv-msg").addEventListener("input", verify);
+  $("#tv-sig").addEventListener("input", verify);
+  sign();
+})();
+
+/* ---------------------------------------------------------------- Figure 6.1: forging by guessing */
+(function guess() {
+  if (!$("#gs-run")) return;
+  const target = () => {
+    $("#gs-target").innerHTML = TOY.h === null ? "Waiting for Figure 5.1…" :
+      `Target: <b class="c-msg">h = ${TOY.h}</b>, the hash of the message in Figure 5.1. The forger knows <span class="c-pub">n = 3233</span> and <span class="c-pub">e = 17</span>, but not d.`;
+    $("#gs-out").innerHTML = "";
+  };
+  TOY.listeners.push(target);
+  target();
+  $("#gs-run").addEventListener("click", () => {
+    if (TOY.h === null) return;
+    const n = 3233, h = Number(TOY.h);
+    const t0 = performance.now();
+    let s = 0;
+    while (powN(s, 17, n) !== h) s++;
+    const ms = performance.now() - t0;
+    $("#gs-out").innerHTML = verdict(false, `<b>Forged.</b> s = ${s} works: ${s}${sup(17)} mod 3233 = ${h}. Found after ${(s + 1).toLocaleString("en-US")} tries in ${ms < 0.1 ? "under 0.1" : ms.toFixed(1)} ms. ${TOY.s !== null && BigInt(s) === TOY.s ? "It is Alice's own signature: only one s fits." : ""}`) +
+      `<p class="small" style="margin:8px 0 0">With a 2,048-bit n there are about 3 × 10${sup(616)} values of s to try.</p>`;
+  });
+})();
+
+/* ---------------------------------------------------------------- Figure 6.2: factoring race */
+(function race() {
+  const btn = $("#fr-run");
+  if (!btn) return;
+  const sizes = [16, 20, 24, 28, 32, 36, 40, 44, 48, 52];
+  function randPrime(bits) {
+    const lo = 2 ** (bits - 1) + 2 ** (bits - 2), hi = 2 ** bits;
+    for (;;) {
+      let x = lo + Math.floor(Math.random() * (hi - lo));
+      if (x % 2 === 0) x++;
+      while (x < hi && !isPrimeNum(x)) x += 2;
+      if (x < hi) return x;
+    }
+  }
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    const body = $("#fr-rows"); body.innerHTML = ""; $("#fr-sum").textContent = "";
+    const results = [];
+    for (const bits of sizes) {
+      const p = randPrime(bits / 2), q = randPrime(bits / 2), n = p * q;
+      await new Promise((r) => setTimeout(r, 40));
+      const t0 = performance.now();
+      let i = 3;
+      while (n % i !== 0) i += 2;
+      const ms = performance.now() - t0, divs = (i - 1) / 2;
+      const f = i, g = n / i;
+      results.push({ bits, n, f, g, divs, ms });
+      const max = Math.max(...results.map((r) => r.divs));
+      body.innerHTML = results.map((r) => `<tr><td>${r.bits}</td><td class="n">${r.n.toLocaleString("en-US")} = ${Math.min(r.f, r.g).toLocaleString("en-US")} × ${Math.max(r.f, r.g).toLocaleString("en-US")}</td><td>${r.divs.toLocaleString("en-US")}</td><td>${r.ms < 0.1 ? "&lt;0.1 ms" : r.ms < 10 ? r.ms.toFixed(1) + " ms" : Math.round(r.ms) + " ms"}</td><td class="barcol"><span class="bar" style="width:${Math.max(0.5, (r.divs / max) * 100)}%"></span></td></tr>`).join("");
+    }
+    const last = results[results.length - 1];
+    const rate = last.divs / Math.max(last.ms / 1000, 1e-6);
+    const exp = Math.round(1022.5 * Math.log10(2) - Math.log10(rate) - Math.log10(3.156e7));
+    $("#fr-sum").innerHTML = `Your browser did about ${Math.round(rate / 1e6)} million divisions per second. At that rate, factoring a 2,048-bit n by trial division would take about 10${sup(exp)} years. The universe is about 1.4 × 10${sup(10)} years old.`;
+    btn.disabled = false; btn.textContent = "Run the race again";
+  });
+})();
+
+/* ---------------------------------------------------------------- Figure 7.1: forging by multiplying */
+(function multiply() {
+  if (!$("#mf-a")) return;
+  const n = 3233n, e = 17n, d = 413n;
+  function render() {
+    const ta = $("#mf-a").value.trim(), tb = $("#mf-b").value.trim();
+    if (!/^\d+$/.test(ta) || !/^\d+$/.test(tb) || BigInt(ta) >= n || BigInt(tb) >= n) {
+      $("#mf-out").innerHTML = kv([["", "Enter whole numbers from 0 to 3232."]]); return;
+    }
+    const a = BigInt(ta), b = BigInt(tb), sa = modpow(a, d, n), sb = modpow(b, d, n);
+    const forged = (sa * sb) % n, opened = modpow(forged, e, n), ab = (a * b) % n, own = modpow(ab, d, n);
+    $("#mf-out").innerHTML = kv([
+      [`Alice's signature for ${a}`, `${a}${sup("413")} mod 3233 = <b>${sa}</b>`],
+      [`Alice's signature for ${b}`, `${b}${sup("413")} mod 3233 = <b>${sb}</b>`],
+      [`Forger: multiply them`, `${sa} × ${sb} mod 3233 = <b>${forged}</b> <span class="note">No d used.</span>`],
+      [`Check with the public key`, `${forged}${sup("17")} mod 3233 = <b class="c-msg">${opened}</b>, and ${a} × ${b} mod 3233 = ${ab}`],
+      [`Alice's own signature for ${ab}`, `<b>${own}</b>`],
+    ]) + verdict(false, `<b>Forged.</b> ${forged} is a valid textbook signature for ${ab}, identical to the one Alice would make, and she never signed ${ab}.`);
+  }
+  $("#mf-a").addEventListener("input", render);
+  $("#mf-b").addEventListener("input", render);
+  render();
+})();
+
+/* ---------------------------------------------------------------- the PKCS #1 v1.5 block */
+const DIGEST_INFO = Uint8Array.from([0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20]);
+function buildBlock(hash, k = 256) {
+  const b = new Uint8Array(k).fill(0xff);
+  b[0] = 0; b[1] = 1; b[k - 52] = 0;
+  b.set(DIGEST_INFO, k - 51); b.set(hash, k - 32);
+  return b;
+}
+function renderBlock(bytes, hash) {
+  const k = bytes.length;
+  const cls = (i) => {
+    if (i >= k - 32) return hash && bytes[i] !== hash[i - (k - 32)] ? "b-x" : "b-h";
+    if (i < 2 || i === k - 52) return "b-hd";
+    if (i < k - 52) return "b-ff";
+    return "b-di";
+  };
+  return `<div class="legend"><span><i class="b-hd"></i>00 01 and 00</span><span><i class="b-ff"></i>FF filler</span><span><i class="b-di"></i>DigestInfo</span><span><i class="b-h"></i>hash</span>${hash ? '<span><i class="b-x"></i>differs from the message\'s hash</span>' : ""}</div>` +
+    `<div class="scroll"><div class="blk">${Array.from(bytes, (b, i) => `<span class="${cls(i)}" title="byte ${i}">${b.toString(16).padStart(2, "0")}</span>`).join("")}</div></div>`;
+}
+function layoutOk(bytes) {
+  const want = buildBlock(new Uint8Array(32), bytes.length);
+  for (let i = 0; i < bytes.length - 32; i++) if (bytes[i] !== want[i]) return false;
+  return true;
+}
+
+/* ---------------------------------------------------------------- Figure 8.1: a real 2048-bit key */
+(function realKey() {
+  if (!$("#rk-gen")) return;
+  if (!hasCrypto) { $("#rk-info").textContent = "This browser has no Web Crypto, so this figure can't run."; $("#rk-gen").disabled = true; return; }
+  const st = { key: null, n: 0n, e: 0n, d: 0n, sig: null, signedMsg: "" };
+  const digits = (x) => x.toString().length;
+  $("#rk-gen").addEventListener("click", async () => {
+    $("#rk-gen").disabled = true; $("#rk-info").textContent = "Searching for two 1,024-bit primes…";
+    const t0 = performance.now();
+    st.key = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
+    const ms = performance.now() - t0;
+    const jwk = await crypto.subtle.exportKey("jwk", st.key.privateKey);
+    const big = (f) => toBig(b64urlToBytes(jwk[f]));
+    const n = big("n"), e = big("e"), d = big("d"), p = big("p"), q = big("q");
+    Object.assign(st, { n, e, d, sig: null });
+    $("#rk-info").textContent = `Made in ${Math.round(ms)} ms.`;
+    $("#rk-n").textContent = n.toString(); $("#rk-nd").textContent = `(${digits(n)} digits, ${n.toString(2).length} bits)`;
+    $("#rk-e").textContent = e.toString();
+    $("#rk-p").textContent = p.toString(); $("#rk-pd").textContent = `(${digits(p)} digits)`;
+    $("#rk-q").textContent = q.toString(); $("#rk-qd").textContent = `(${digits(q)} digits)`;
+    $("#rk-d").textContent = d.toString(); $("#rk-dd").textContent = `(${digits(d)} digits)`;
+    const L = lcm(p - 1n, q - 1n);
+    const c1 = p * q === n, c2 = (e * d) % L === 1n;
+    $("#rk-checks").innerHTML = `<div><span class="badge ${c1 ? "ok" : "bad"}">${c1 ? "✓" : "✗"}</span> p × q = n, checked with BigInt</div>` +
+      `<div><span class="badge ${c2 ? "ok" : "bad"}">${c2 ? "✓" : "✗"}</span> e × d mod lcm(p − 1, q − 1) = 1, the rule from §2</div>`;
+    $("#rk-key").hidden = false;
+    $("#rk-sign").disabled = false; $("#rk-open").disabled = true; $("#rk-hand").disabled = true;
+    $("#rk-sig").hidden = true; $("#rk-block").innerHTML = ""; $("#rk-hand-out").innerHTML = ""; $("#rk-otime").textContent = ""; $("#rk-htime").textContent = "";
+    $("#rk-gen").disabled = false; $("#rk-gen").textContent = "Make a new key pair";
+  });
+  $("#rk-sign").addEventListener("click", async () => {
+    st.signedMsg = $("#rk-msg").value;
+    st.sig = new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", st.key.privateKey, enc.encode(st.signedMsg)));
+    $("#rk-sig").hidden = false;
+    $("#rk-sig").innerHTML = `<span class="small" style="font-family:var(--sans)">Signature s, ${st.sig.length} bytes, as hexadecimal:</span><br>${hex(st.sig)}`;
+    $("#rk-open").disabled = false; $("#rk-hand").disabled = false;
+    $("#rk-block").innerHTML = ""; $("#rk-hand-out").innerHTML = ""; $("#rk-otime").textContent = ""; $("#rk-htime").textContent = "";
+  });
+  $("#rk-open").addEventListener("click", async () => {
+    const t0 = performance.now();
+    const block = toBytes(modpow(toBig(st.sig), st.e, st.n), 256);
+    const ms = performance.now() - t0;
+    const msg = $("#rk-msg").value, hash = await sha256(enc.encode(msg));
+    $("#rk-otime").textContent = `Opening took ${ms.toFixed(1)} ms.`;
+    const hashOk = hex(block.slice(224)) === hex(hash), lay = layoutOk(block);
+    $("#rk-block").innerHTML = renderBlock(block, hash) + kv([
+      ["SHA-256 of the message now", `<span class="c-msg">${hex(hash)}</span>`],
+      ["Last 32 bytes of the block", `<span class="c-msg">${hex(block.slice(224))}</span>`],
+    ]) + verdict(lay && hashOk, lay && hashOk
+      ? `<b>Valid.</b> The layout is exactly 00 01, 202 bytes of FF, 00, DigestInfo, and the last 32 bytes equal the message's SHA-256.`
+      : `<b>Invalid.</b> The block still holds the hash of the message that was signed, but the message now hashes to something else.`);
+  });
+  $("#rk-hand").addEventListener("click", async () => {
+    const hash = await sha256(enc.encode(st.signedMsg));
+    const block = buildBlock(hash);
+    const t0 = performance.now();
+    const mine = toBytes(modpow(toBig(block), st.d, st.n), 256);
+    const ms = performance.now() - t0;
+    $("#rk-htime").textContent = `Signing by hand took ${ms.toFixed(1)} ms.`;
+    const same = hex(mine) === hex(st.sig);
+    $("#rk-hand-out").innerHTML = `<div class="num" style="margin-top:8px"><span class="small" style="font-family:var(--sans)">Signature made by hand:</span><br>${hex(mine)}</div>` +
+      verdict(same, same
+        ? `<b>Identical</b> to the browser's signature, all 256 bytes. PKCS #1 v1.5 has no randomness, so the same key and message always give the same signature.`
+        : `<b>Different</b> from the browser's signature.`);
+  });
+})();
+
+/* ---------------------------------------------------------------- Figure 9.1: the lab token */
+const LAB = { token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6InNjZEtvV0pqVXExZmtERFJKX2dxOGJlZmlnNSJ9.eyJhdWQiOiJhMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMGEiLCJpc3MiOiJodHRwOi8vaWRwLmxvY2FsaG9zdDo5MDAwLzBmMWUyZDNjLTRiNWEtNDY5Ny04ODc3LTY2NTU0NDMzMjIxMS92Mi4wIiwiaWF0IjoxNzkyMDE1NTQzLCJuYmYiOjE3OTIwMTU1NDMsImV4cCI6MTc5MjAxOTE0MywibmFtZSI6IkFsaWNlIEV4YW1wbGUiLCJvaWQiOiJhYWFhYWFhYS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJhbGljZUBsYWIudGVzdCIsInNpZCI6ImY5OGVkMjAyLWU1N2UtNDk5ZC05YWY2LTMyNDJlYjFmZTJjZCIsInN1YiI6IlpaMFJ6NWFIU3dYVDFDM3M3eUt6NW14MmM0R0IxSUNIWnNSa0k5N1NKX0EiLCJ0aWQiOiIwZjFlMmQzYy00YjVhLTQ2OTctODg3Ny02NjU1NDQzMzIyMTEiLCJ2ZXIiOiIyLjAiLCJub25jZSI6ImlQUTZYeUZ5ekhFamxLMzJIR3NGeVEiLCJyb2xlcyI6WyJBZG1pbiJdfQ.Bp6x50Zg53NDZ6k3qUwwTKQc9wFGqB8cwf_zQuSpRzLelqnIaRF2PxTyYTEkzwCzieh25dMAKFWLZr8Ui2wQAfDpKrGB_fRiwJqnzc_4OzKnQqavuajq6OHYaKzvAew7D_oZSM4dguQ9L5-aN_bQGFfSEIE-uc8xjgFn5IM-gaOBLZ0QvJ0tCjh1IOgHCsBvhV7aJSttuPToAKam7n6h3vWYDYmnIO9gfRD0OoQHYDMuewaU6MzEeLIA9UExCdRS9kOlCtnF2bhjyTL2qGQNROgw2l02rbaim813H5cmQ2Crm0UjGzEM0T3svZSHEx3tTITgCzwRZu2uWn2KX1p3qg", jwks: {"keys": [{"kty": "RSA", "use": "sig", "alg": "RS256", "kid": "scdKoWJjUq1fkDDRJ_gq8befig5", "n": "xq0D4NsOq2i1echJ5KDspmNabtwijBNEUcIFeLyPz3AY2YBQEbb9zAzei-wEEO7x6WwjVV92zyua1wlAlcMxqijnbMCfy0CXxLxC2tggsrlb7qjRsK4s5F1Yk3IgP1TgtFOfSvocVbfoNHmoqcdK_RDek7w3wpwwdl4oC_FBrvxDHZm3AFjbsVsnfVMEu6prMLkuEUqXnzyoV4OnJl08m6kOTTWxdFNfhF2Plsu4gYk6apCv99gUcrFTzyouIGScdvAljbF296EHF0dGt4q0K4G-NGBzja204DnktR4JMRJTC1fhV4wsf98RKg63Y_FKa_USJ65y6w-uUKmI0mYDkQ", "e": "AQAB"}]} };
+(function tokenCheck() {
+  if (!$("#tk-token") || !hasCrypto) return;
+  const [h0, p0, s0] = LAB.token.split(".");
+  let payload = p0;
+  async function render() {
+    const header = JSON.parse(dec.decode(b64urlToBytes(h0)));
+    const key = LAB.jwks.keys.find((k) => k.kid === header.kid);
+    const n = toBig(b64urlToBytes(key.n)), e = toBig(b64urlToBytes(key.e));
+    const sBytes = b64urlToBytes(s0);
+    const block = toBytes(modpow(toBig(sBytes), e, n), sBytes.length);
+    const signed = h0 + "." + payload;
+    const hash = await sha256(enc.encode(signed));
+    const changed = payload !== p0;
+    $("#tk-token").innerHTML = `<span class="h">${h0}</span>.<span class="p"${changed ? ' style="background:var(--mark)"' : ""}>${payload}</span>.<span class="s">${s0}</span>`;
+    const ok = layoutOk(block) && hex(block.slice(-32)) === hex(hash);
+    $("#tk-out").innerHTML = kv([
+      ["kid in the header", `${esc(header.kid)} <span class="note">picks the key below from the key set</span>`],
+      [`<span class="c-pub">n</span> from the key set`, `${n.toString(2).length} bits (${b64urlToBytes(key.n).length} bytes)`],
+      [`<span class="c-pub">e</span> from the key set`, `"${esc(key.e)}" = bytes ${hex(b64urlToBytes(key.e)).replace(/(..)(?!$)/g, "$1 ")} = ${e}`],
+      ["Signature s", `${sBytes.length} bytes`],
+      ["Signed text", `header.payload, ${signed.length} characters`],
+      ["SHA-256 of it", `<span class="c-msg">${hex(hash)}</span>`],
+    ]) + verdict(ok, ok
+      ? `<b>Valid.</b> s<sup>e</sup> mod n is a correct 256-byte block, and its last 32 bytes equal the SHA-256 of header.payload.`
+      : `<b>Invalid.</b> The signature still opens to the block for the original payload, but the changed payload has a different SHA-256.`);
+    $("#tk-block").innerHTML = renderBlock(block, hash);
+  }
+  $("#tk-tamper").addEventListener("click", () => {
+    const text = dec.decode(b64urlToBytes(p0)).replace('"Admin"', '"admin"');
+    payload = b64url(enc.encode(text));
+    render();
+  });
+  $("#tk-restore").addEventListener("click", () => { payload = p0; render(); });
+  render();
+})();
+
+</script>
+</body>
+</html>

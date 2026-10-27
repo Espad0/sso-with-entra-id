@@ -1,6 +1,7 @@
 # Licence for the chapter content
 
-The chapter text and figures in the `docs/` folder are licensed under the
+The text and figures in the `docs/` folder (the chapter and the RSA page) are
+licensed under the
 **Creative Commons Attribution 4.0 International** licence (CC BY 4.0).
 
 - Summary: https://creativecommons.org/licenses/by/4.0/

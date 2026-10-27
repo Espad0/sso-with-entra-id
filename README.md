@@ -21,6 +21,14 @@ glossary.
 | III. Microsoft Entra ID | Tenants and app registrations · Who may enter, and what they may do · Sessions, lifetimes and sign-out |
 | IV. Building it | Three ways to add sign-in (a library, a sign-in proxy, the AWS load balancer) · Containers on AWS · The lab · A plan for a real project |
 
+**Companion page: [How RSA Signatures Work](https://espad0.github.io/sso-with-entra-id/rsa/).**
+Section 3.3 of the chapter treats RSA as a black box. This page opens it: remainders
+and powers, a key pair made from two small primes, signing and verifying by hand,
+three ways a forger would try (guessing, factoring, multiplying signatures), why
+real RSA pads the hash, and a real 2048-bit RS256 signature opened byte by byte.
+About 45 minutes, with nine interactive figures and a 15-minute lab with Python and
+OpenSSL.
+
 ## The lab
 
 `sso-lab/` runs three containers: "Mini Entra", a small OpenID Connect
@@ -51,6 +59,9 @@ This chapter was written with Claude, Anthropic's AI model, in October 2026.
   with curl and in a Chromium-based browser.
 - **Checked independently:** a lab token's signature with OpenSSL, and the lab
   app's discovery and key code against Entra's real public endpoints.
+- **RSA page:** every Python output was compared automatically with Python 3.13,
+  and its lab was run in order with OpenSSL 3.6.3 (key generation and opening the
+  signature also with macOS's LibreSSL 3.3.6).
 - **Not run:** a sign-in against a real Entra tenant, the Authlib example in
   section 14.3, and the oauth2-proxy and Caddy configuration in section 14.4.
 
@@ -61,9 +72,10 @@ section 19 before you rely on a number.
 ## Corrections
 
 If something is wrong or out of date, please open an issue or a pull request.
-The chapter is a single file, `docs/index.html`.
+Each page is a single file: the chapter is `docs/index.html` and the RSA page
+`docs/rsa/index.html`.
 
 ## Licence
 
-- Chapter text and figures: [CC BY 4.0](LICENSE-CONTENT.md)
+- Text and figures of both pages: [CC BY 4.0](LICENSE-CONTENT.md)
 - Code and configuration files: [MIT](LICENSE)

@@ -627,6 +627,7 @@ Cookie: session=Qm9iJ3Mgc2Vzc2lvbg</pre>
   <li><strong>Verifying</strong> (anyone can do it, with the public key): transform the signature back with the public key and compare the result with your own SHA-256 hash of the message. They match only if the message is unchanged and the signature was made with the matching private key.</li>
 </ul>
 <p>So a valid signature proves two things: <strong>who made the message</strong> (whoever holds the private key) and <strong>that it was not changed</strong>. It does not hide the message, which stays readable.</p>
+<div class="key"><p class="k">Going deeper</p><p>What "transform the hash with the private key" actually computes, and why nobody can do it without that key, is explained step by step in the companion page <a href="rsa/">How RSA Signatures Work</a>: from remainders and two small primes to a real 2048-bit signature, with interactive figures and a 15-minute lab (about 45 minutes to read).</p></div>
 <p>Try it with a real key pair, made in your browser:</p>
 <figure id="fig-sign">
   <div class="w">
@@ -2955,6 +2956,10 @@ upstreams = ["static://202"]
 
 <section class="chap" id="s19" data-toc="Further reading">
 <h2 class="sec"><span class="n">19</span>Further reading</h2>
+<h4>Companion page</h4>
+<ul class="refs">
+  <li><a href="rsa/">How RSA Signatures Work</a>: §3.3 in depth. How a key pair is made, how signing and verifying work, why forging needs the factors of <i>n</i>, and what is inside a real RS256 signature.</li>
+</ul>
 <h4>Microsoft's documentation</h4>
 <ul class="refs">
   <li><a href="https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc">OpenID Connect on the Microsoft identity platform</a>: endpoints, sign-in, sign-out and front-channel logout.</li>
